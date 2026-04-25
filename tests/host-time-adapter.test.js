@@ -49,13 +49,91 @@ test("reports the beat window represented by a block", () => {
     startBeat: 4,
     endBeat: 6,
     durationBeats: 2,
+    isLooping: false,
+    segments: [{ startBeat: 4, endBeat: 6, offsetBeat: 0 }],
   });
+});
+
+test("schedules events across a loop wrap", () => {
+  const scheduled = scheduleEventsForBlock([event("late", 15.98, 0.25), event("zero", 0, 0.5), event("early", 0.04, 0.5), event("outside", 0.06, 0.5)], {
+    bpm: 120,
+    sampleRate: 48000,
+    blockSize: 2400,
+    blockStartBeat: 15.95,
+    isLooping: true,
+    loopStartBeat: 0,
+    loopEndBeat: 16,
+  });
+
+  assert.deepEqual(
+    scheduled.map((item) => [item.id, item.sampleOffset]),
+    [
+      ["late", 720],
+      ["zero", 1200],
+      ["early", 2160],
+    ],
+  );
+});
+
+test("includes loop-start boundary and excludes block-end boundary", () => {
+  const scheduled = scheduleEventsForBlock([event("zero", 0, 0.5), event("end", 0.05, 0.5)], {
+    bpm: 120,
+    sampleRate: 48000,
+    blockSize: 2400,
+    blockStartBeat: 15.95,
+    isLooping: true,
+    loopStartBeat: 0,
+    loopEndBeat: 16,
+  });
+
+  assert.deepEqual(
+    scheduled.map((item) => item.id),
+    ["zero"],
+  );
+});
+
+test("reports wrapped block segments", () => {
+  const window = getLoopingBlockWindow({
+    bpm: 120,
+    sampleRate: 48000,
+    blockSize: 2400,
+    blockStartBeat: 15.95,
+    isLooping: true,
+    loopStartBeat: 0,
+    loopEndBeat: 16,
+  });
+
+  assert.equal(window.startBeat, 15.95);
+  assert.ok(Math.abs(window.durationBeats - 0.1) < 1e-9);
+  assert.equal(window.isLooping, true);
+  assert.deepEqual(window.segments.map(roundSegment), [
+    { startBeat: 15.95, endBeat: 16, offsetBeat: 0 },
+    { startBeat: 0, endBeat: 0.05, offsetBeat: 0.05 },
+  ]);
+});
+
+test("wraps absolute host beat into loop domain", () => {
+  const scheduled = scheduleEventsForBlock([event("zero", 0, 0.5)], {
+    bpm: 120,
+    sampleRate: 48000,
+    blockSize: 2400,
+    blockStartBeat: 31.95,
+    isLooping: true,
+    loopStartBeat: 0,
+    loopEndBeat: 16,
+  });
+
+  assert.deepEqual(
+    scheduled.map((item) => [item.id, item.sampleOffset]),
+    [["zero", 1200]],
+  );
 });
 
 test("rejects invalid host timing context", () => {
   assert.throws(() => beatsToSamples(1, 0, 48000), /bpm/);
   assert.throws(() => samplesToBeats(1, 120, 0), /sampleRate/);
   assert.throws(() => scheduleEventsForBlock(events, { bpm: 120, sampleRate: 48000, blockSize: 0 }), /blockSize/);
+  assert.throws(() => scheduleEventsForBlock(events, { bpm: 120, sampleRate: 48000, blockSize: 128, isLooping: true, loopEndBeat: 0 }), /loopEndBeat/);
 });
 
 function event(id, startBeat, durationBeats) {
@@ -78,3 +156,14 @@ function event(id, startBeat, durationBeats) {
   };
 }
 
+function roundSegment(segment) {
+  return {
+    startBeat: roundBeat(segment.startBeat),
+    endBeat: roundBeat(segment.endBeat),
+    offsetBeat: roundBeat(segment.offsetBeat),
+  };
+}
+
+function roundBeat(value) {
+  return Math.round(value * 1000000) / 1000000;
+}

@@ -138,7 +138,10 @@ scheduleEventsForBlock(events, {
   bpm,
   sampleRate,
   blockSize,
-  blockStartBeat
+  blockStartBeat,
+  isLooping,
+  loopStartBeat,
+  loopEndBeat
 })
 ```
 
@@ -149,3 +152,33 @@ It returns events with:
 - `blockStartBeat`: source host beat for the block
 
 This mirrors the future plugin responsibility: read host transport/tempo, keep the core in beats, and schedule synth voices in sample time.
+
+Scheduling uses half-open beat windows: `[startBeat, endBeat)`.
+
+That means:
+
+- an event exactly at the block start is included
+- an event exactly at the block end is excluded
+- when a block crosses `loopEndBeat`, the adapter also schedules events from `loopStartBeat`
+- the core still does not know whether the host is looping
+
+## Browser Audio Engine
+
+`src/web/web-audio-engine.js` uses the host-time adapter even in the browser.
+
+It simulates a plugin-style scheduler:
+
+1. read browser `AudioContext.currentTime`
+2. convert it to a host-like beat block
+3. call `scheduleEventsForBlock`
+4. schedule only the events in the next short lookahead window
+5. create Web Audio voices for those scheduled events
+
+The browser engine is still only a development body, but its timing path now mirrors the future plugin path:
+
+```txt
+core events in beats
+-> host-time block scheduling
+-> sample offsets
+-> synth voices
+```
