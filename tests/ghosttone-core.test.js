@@ -70,11 +70,12 @@ test("generatePattern returns a fixed beat-based event contract", () => {
     "role",
     "degree",
     "motionType",
+    "carriedFromPrevious",
     "velocity",
   ]);
   assert.equal(typeof event.startBeat, "number");
   assert.equal(typeof event.durationBeats, "number");
-  assert.equal(event.motionType, "arp");
+  assert.ok(["stay", "step", "leap"].includes(event.motionType));
   assert.ok(!("time" in event));
   assert.ok(!("duration" in event));
 });
@@ -117,6 +118,34 @@ test("higher drift increases drift movement with identical musical inputs", () =
   const high = generatePattern({ mode: "pad", ghostAmount: 0.8, drift: 1, ghostEnabled: true }, progression, 555);
 
   assert.ok(sum(high.events.map((event) => event.driftAmount)) > sum(low.events.map((event) => event.driftAmount)));
+});
+
+test("role-based generator emits harmonic roles and carry metadata", () => {
+  const result = generatePattern({ generatorMode: "roleBased", mode: "pad", ghostAmount: 0.8, drift: 0.6 }, progression, 8080);
+
+  assert.ok(result.events.length > 0);
+  assert.ok(result.events.some((event) => event.role === "anchor"));
+  assert.ok(result.events.some((event) => event.role === "color"));
+  assert.ok(result.events.some((event) => event.role === "tension"));
+  assert.ok(result.events.every((event) => typeof event.carriedFromPrevious === "boolean"));
+  assert.ok(result.events.every((event) => ["stay", "step", "leap"].includes(event.motionType)));
+});
+
+test("role-based generator stays deterministic with same seed", () => {
+  const settings = {
+    generatorMode: "roleBased",
+    mode: "evolve",
+    ghostAmount: 0.7,
+    drift: 0.42,
+    harmonyLock: 0.6,
+    colorMode: "alien",
+    voicingStyle: "smooth",
+  };
+
+  const first = generatePattern(settings, progression, 9090);
+  const second = generatePattern(settings, progression, 9090);
+
+  assert.deepEqual(second, first);
 });
 
 function range(values) {

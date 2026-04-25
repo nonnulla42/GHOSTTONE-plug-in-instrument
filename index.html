@@ -41,6 +41,7 @@
           <button id="playButton" class="primary-button" type="button">Play</button>
           <button id="generateButton" class="icon-button" type="button" aria-label="Generate new pattern" title="Generate new pattern">R</button>
           <button id="exportButton" class="secondary-button" type="button">Export MIDI</button>
+          <button id="exportWavButton" class="secondary-button" type="button">Export WAV</button>
         </div>
       </section>
 
@@ -119,6 +120,16 @@
 
       <section class="workspace">
         <aside class="control-panel" aria-label="Generator controls">
+          <div class="panel-block">
+            <div class="section-label">
+              <span>Generator</span>
+            </div>
+            <div class="segmented two-up" role="group" aria-label="Generator mode">
+              <button class="generator-segment active" data-generator-mode="classic" type="button">Classic</button>
+              <button class="generator-segment" data-generator-mode="roleBased" type="button">Role-based</button>
+            </div>
+          </div>
+
           <div class="panel-block">
             <div class="section-label">
               <span>Motion</span>

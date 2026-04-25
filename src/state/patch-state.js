@@ -19,6 +19,7 @@ export const DEFAULT_PATCH = Object.freeze({
     chordValue(3, 0, "Gsus4"),
   ]),
   core: Object.freeze({
+    generatorMode: "classic",
     ghostAmount: 48,
     drift: 35,
     harmonyLock: 68,
@@ -124,6 +125,7 @@ export function setPatchSlot(state, slot, patch) {
 export function patchToCoreSettings(patch) {
   const normalized = normalizePatch(patch);
   return {
+    generatorMode: normalized.core.generatorMode,
     mode: normalized.mode,
     ghostAmount: normalized.core.ghostAmount / 100,
     drift: normalized.core.drift / 100,
@@ -226,6 +228,7 @@ export function clonePatchState(state) {
 
 function normalizeCore(core = {}) {
   return {
+    generatorMode: ["classic", "roleBased"].includes(core.generatorMode) ? core.generatorMode : DEFAULT_PATCH.core.generatorMode,
     ghostAmount: clampNumber(core.ghostAmount, 0, 100, DEFAULT_PATCH.core.ghostAmount),
     drift: clampNumber(core.drift, 0, 100, DEFAULT_PATCH.core.drift),
     harmonyLock: clampNumber(core.harmonyLock, 0, 100, DEFAULT_PATCH.core.harmonyLock),

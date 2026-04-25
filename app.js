@@ -15,6 +15,7 @@ import {
 } from "./src/state/patch-state.js";
 import { WebAudioAdapter } from "./src/web/audio-adapter.js";
 import { exportMidi } from "./src/web/midi-export-adapter.js";
+import { exportWav } from "./src/web/wav-export-adapter.js";
 import { applyPatch, capturePatch, updateCompareUi } from "./src/web/patch-adapter.js";
 import { findPreset } from "./src/web/presets.js";
 import { getElements, refreshProgressionUi, updateReadouts } from "./src/web/ui-adapter.js";
@@ -162,6 +163,16 @@ function setMode(mode) {
   updateActivePatch((patch) => ({ ...patch, mode }));
 }
 
+function setGeneratorMode(generatorMode) {
+  updateActivePatch((patch) => ({
+    ...patch,
+    core: {
+      ...patch.core,
+      generatorMode,
+    },
+  }));
+}
+
 function setSound(sound) {
   updateActivePatch((patch) => ({ ...patch, sound }), { restartAudio: true });
 }
@@ -256,8 +267,25 @@ function bindEvents() {
     exportMidi(state.pattern, patch.bpm, patch.sound);
   });
 
+  els.exportWavButton.addEventListener("click", () => {
+    updateActivePatchFromUi({ restartAudio: false });
+    const patch = activePatch();
+    exportWav(patch, {
+      sampleRate: 44100,
+      bpm: patch.bpm,
+      startBeat: 0,
+      endBeat: state.pattern.loopBeats,
+      blockSize: 2048,
+      channelCount: 2,
+    });
+  });
+
   els.bpm.addEventListener("input", () => updateActivePatchFromUi({ soundOnly: true }));
   els.bpm.addEventListener("change", () => updateActivePatchFromUi({ soundOnly: true }));
+
+  els.generatorButtons.forEach((button) => {
+    button.addEventListener("click", () => setGeneratorMode(button.dataset.generatorMode));
+  });
 
   document.querySelectorAll(".segment").forEach((button) => {
     button.addEventListener("click", () => setMode(button.dataset.mode));
@@ -307,4 +335,3 @@ function bindEvents() {
 
 bindEvents();
 loadCurrentPatch({ restartAudio: false });
-

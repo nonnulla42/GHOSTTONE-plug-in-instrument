@@ -16,8 +16,14 @@ export function capturePatch(els, basePatch, name = basePatch?.name || "Patch") 
       slot: Number(input.dataset.slot),
       value: input.value,
     })),
-    core: readControlGroup(els, [...coreRangeControls, ...coreSelectControls, ...coreToggleControls]),
-    soundControls: readControlGroup(els, soundControls),
+    core: {
+      ...basePatch.core,
+      ...readControlGroup(els, [...coreRangeControls, ...coreSelectControls, ...coreToggleControls]),
+    },
+    soundControls: {
+      ...basePatch.soundControls,
+      ...readControlGroup(els, soundControls),
+    },
   });
 }
 
@@ -32,6 +38,7 @@ export function applyPatch(els, patch) {
   applyControlGroup(els, normalized.core);
   applyControlGroup(els, normalized.soundControls);
   applyChords(els, normalized.chords);
+  setActiveButton(".generator-segment", "generatorMode", normalized.core.generatorMode);
   setActiveButton(".segment", "mode", normalized.mode);
   setActiveButton(".sound-segment", "sound", normalized.sound);
 }

@@ -1,3 +1,12 @@
+import {
+  assignHarmonicRole,
+  generateRoleDriftEndCents,
+  generateRoleMicroOffsetCents,
+  pickMotionType,
+  resolveDurationBeats,
+  shouldCarryForward,
+} from "./harmonic-roles.js";
+
 const noteMap = {
   C: 0,
   "C#": 1,
@@ -35,6 +44,7 @@ const roleIntensity = {
 };
 
 export const defaultSettings = Object.freeze({
+  generatorMode: "classic",
   mode: "pad",
   ghostAmount: 0.48,
   drift: 0.35,
@@ -100,6 +110,7 @@ function normalizeSettings(settings = {}) {
   const merged = { ...defaultSettings, ...settings };
   return {
     ...merged,
+    generatorMode: ["classic", "roleBased"].includes(merged.generatorMode) ? merged.generatorMode : defaultSettings.generatorMode,
     mode: ["pad", "arp", "evolve"].includes(merged.mode) ? merged.mode : defaultSettings.mode,
     ghostAmount: normalizeUnit(merged.ghostAmount, defaultSettings.ghostAmount),
     drift: normalizeUnit(merged.drift, defaultSettings.drift),
@@ -369,14 +380,18 @@ function buildSections(progression, settings, seed) {
     for (let slotIndex = 0; slotIndex < slotCount; slotIndex += 1) {
       const slotState = barState.slots[slotIndex] || barState.slots[0];
       const chord = parseChord(slotState.chord);
+      const roleLabeledNotes = chord.notes.map((note) => ({
+        ...note,
+        harmonicRole: assignHarmonicRole(note),
+      }));
       const sectionIndex = sections.length;
-      const voicedNotes = applyVoicing(chord.notes, slotState, settings, previousNotes, sectionIndex, seed);
+      const voicedNotes = applyVoicing(roleLabeledNotes, slotState, settings, previousNotes, sectionIndex, seed);
 
       sections.push({
         label: chord.label,
         rootPc: chord.rootPc,
         notes: voicedNotes,
-        baseNotes: chord.notes,
+        baseNotes: roleLabeledNotes,
         barIndex,
         slotIndex,
         startBeat: barIndex * 4 + slotIndex * durationBeats,
@@ -417,11 +432,9 @@ function chooseOffset(role, currentNote, prevChord, nextChord, rand, settings) {
   return clamp((sign + colorDirection * 0.35) * maxRange * randomShape, -72, 72);
 }
 
-function addEvent(events, note, sectionIndex, voiceId, startBeat, durationBeats, rand, settings, prevChord, chord, nextChord) {
-  const cents = chooseOffset(note.role, note, prevChord, nextChord, rand, settings);
-  const driftWidth = settings.ghostEnabled ? settings.drift * (note.role === "stable" ? 8 : 18) : 0;
-  const driftEnd = clamp(cents + (rand() - 0.5) * driftWidth, -80, 80);
-
+function pushEvent(events, note, sectionIndex, voiceId, startBeat, durationBeats, chord, details) {
+  const role = details.role || note.role;
+  const driftEnd = clamp(details.driftEnd, -80, 80);
   events.push({
     id: `${sectionIndex}:${voiceId}:${startBeat.toFixed(3)}:${events.length}`,
     sectionIndex,
@@ -431,23 +444,115 @@ function addEvent(events, note, sectionIndex, voiceId, startBeat, durationBeats,
     midi: note.midi,
     startBeat,
     durationBeats,
-    cents,
-    driftAmount: Math.abs(driftEnd - cents),
+    cents: details.cents,
+    driftAmount: Math.abs(driftEnd - details.cents),
     driftEnd,
-    role: note.role,
+    role,
     degree: note.degree,
-    motionType: settings.mode,
-    velocity: note.role === "stable" ? 0.58 : note.role === "tension" ? 0.42 : 0.5,
+    motionType: details.motionType,
+    carriedFromPrevious: Boolean(details.carriedFromPrevious),
+    velocity: role === "anchor" || role === "stable" ? 0.58 : role === "tension" ? 0.42 : 0.5,
   });
 }
 
-export function generatePattern(settings = {}, progression = defaultProgression, seed = 1) {
-  const normalizedSettings = normalizeSettings(settings);
-  const normalizedProgression = normalizeProgression(progression);
-  const normalizedSeed = seedToInt(seed);
+function addClassicEvent(events, note, sectionIndex, voiceId, startBeat, durationBeats, rand, settings, prevChord, chord, nextChord) {
+  const cents = chooseOffset(note.role, note, prevChord, nextChord, rand, settings);
+  const driftWidth = settings.ghostEnabled ? settings.drift * (note.role === "stable" ? 8 : 18) : 0;
+  const driftEnd = clamp(cents + (rand() - 0.5) * driftWidth, -80, 80);
+  const motionType = settings.mode === "pad" ? "stay" : "step";
+
+  pushEvent(events, note, sectionIndex, voiceId, startBeat, durationBeats, chord, {
+    cents,
+    driftEnd,
+    motionType,
+    carriedFromPrevious: false,
+  });
+}
+
+function getRoleColorIntensity(role, settings) {
+  const profile = colorProfiles[settings.colorMode];
+  if (role === "anchor") return profile.stable;
+  if (role === "tension") return profile.tension;
+  return profile.color;
+}
+
+function pickClosestNote(notes, previousMidi) {
+  return notes.reduce((best, candidate) => {
+    const candidateMidi = octaveNear(candidate.midi, previousMidi);
+    const candidateDistance = Math.abs(candidateMidi - previousMidi);
+    if (!best || candidateDistance < best.distance) {
+      return { note: { ...candidate, midi: candidateMidi }, distance: candidateDistance };
+    }
+    return best;
+  }, null)?.note || notes[0];
+}
+
+function chooseMotionNote(notes, previousEvent, motionType, carriedFromPrevious) {
+  if (!previousEvent) return notes[0];
+
+  const previousPc = normalizePc(previousEvent.midi);
+  const candidates = notes.map((candidate) => {
+    let midi = octaveNear(candidate.midi, previousEvent.midi);
+    let distance = Math.abs(midi - previousEvent.midi);
+
+    if (motionType === "leap" && distance < 5) {
+      const up = midi + 12;
+      const down = midi - 12;
+      midi = Math.abs(up - previousEvent.midi) >= Math.abs(down - previousEvent.midi) ? up : down;
+      distance = Math.abs(midi - previousEvent.midi);
+    }
+
+    return {
+      note: { ...candidate, midi },
+      distance,
+      samePc: candidate.pc === previousPc,
+    };
+  });
+
+  if (carriedFromPrevious) {
+    const carried = candidates.filter((candidate) => candidate.samePc).sort((left, right) => left.distance - right.distance)[0];
+    if (carried) return carried.note;
+  }
+
+  if (motionType === "stay") {
+    return candidates.sort((left, right) => left.distance - right.distance)[0]?.note || notes[0];
+  }
+
+  if (motionType === "step") {
+    const steps = candidates.filter((candidate) => candidate.distance > 0 && candidate.distance <= 4).sort((left, right) => left.distance - right.distance);
+    return (steps[0] || candidates.sort((left, right) => left.distance - right.distance)[0])?.note || notes[0];
+  }
+
+  const leaps = candidates.filter((candidate) => candidate.distance >= 5).sort((left, right) => left.distance - right.distance);
+  return (leaps[0] || candidates.sort((left, right) => right.distance - left.distance)[0])?.note || notes[0];
+}
+
+function addRoleBasedEvent(events, note, sectionIndex, voiceId, startBeat, durationBeats, rand, settings, prevChord, chord, nextChord, details = {}) {
+  const role = note.harmonicRole || assignHarmonicRole(note);
+  const cents = generateRoleMicroOffsetCents(role, rand, {
+    ghostEnabled: settings.ghostEnabled,
+    ghostAmount: settings.ghostAmount,
+    harmonyLock: settings.harmonyLock,
+    stayMusical: settings.stayMusical,
+    colorIntensity: getRoleColorIntensity(role, settings),
+  });
+  const driftEnd = generateRoleDriftEndCents(role, cents, rand, {
+    ghostEnabled: settings.ghostEnabled,
+    driftAmount: settings.drift,
+    colorIntensity: getRoleColorIntensity(role, settings),
+  });
+
+  pushEvent(events, note, sectionIndex, voiceId, startBeat, durationBeats, chord, {
+    role,
+    cents,
+    driftEnd,
+    motionType: details.motionType || pickMotionType(role, rand),
+    carriedFromPrevious: details.carriedFromPrevious,
+  });
+}
+
+function generateClassicEvents(events, sections, settings, normalizedSeed) {
   const rand = makeRandom(normalizedSeed);
-  const sections = buildSections(normalizedProgression, normalizedSettings, normalizedSeed);
-  const events = [];
 
   sections.forEach((section, index) => {
     const prevChord = sections[(index - 1 + sections.length) % sections.length];
@@ -456,35 +561,140 @@ export function generatePattern(settings = {}, progression = defaultProgression,
     const sectionBeats = section.durationBeats;
     const notes = section.notes;
 
-    if (normalizedSettings.mode === "pad") {
+    if (settings.mode === "pad") {
       notes.slice(0, 5).forEach((note, voiceIndex) => {
-        addEvent(events, note, index, voiceIndex, baseBeat, Math.max(0.2, sectionBeats - 0.12), rand, normalizedSettings, prevChord, section, nextChord);
+        addClassicEvent(events, note, index, voiceIndex, baseBeat, Math.max(0.2, sectionBeats - 0.12), rand, settings, prevChord, section, nextChord);
       });
     }
 
-    if (normalizedSettings.mode === "arp") {
+    if (settings.mode === "arp") {
       const previousSection = sections[index - 1];
-      const arpNotes = buildArpOrder(notes, section, normalizedSettings, previousSection, normalizedSeed);
-      const offsets = getArpStepOffsets(sectionBeats, normalizedSettings);
+      const arpNotes = buildArpOrder(notes, section, settings, previousSection, normalizedSeed);
+      const offsets = getArpStepOffsets(sectionBeats, settings);
       for (let step = 0; step < offsets.length; step += 1) {
         const note = arpNotes[step % arpNotes.length];
-        const octave = normalizedSettings.arpDirection === "down" ? 0 : step > offsets.length * 0.62 ? 12 : 0;
-        const duration = getArpDuration(sectionBeats, offsets, step, normalizedSettings);
-        addEvent(events, { ...note, midi: note.midi + octave }, index, step % arpNotes.length, baseBeat + offsets[step], duration, rand, normalizedSettings, prevChord, section, nextChord);
+        const octave = settings.arpDirection === "down" ? 0 : step > offsets.length * 0.62 ? 12 : 0;
+        const duration = getArpDuration(sectionBeats, offsets, step, settings);
+        addClassicEvent(events, { ...note, midi: note.midi + octave }, index, step % arpNotes.length, baseBeat + offsets[step], duration, rand, settings, prevChord, section, nextChord);
       }
     }
 
-    if (normalizedSettings.mode === "evolve") {
+    if (settings.mode === "evolve") {
       notes.slice(0, 4).forEach((note, voiceIndex) => {
-        addEvent(events, note, index, voiceIndex, baseBeat, Math.max(0.2, sectionBeats - 0.3), rand, normalizedSettings, prevChord, section, nextChord);
+        addClassicEvent(events, note, index, voiceIndex, baseBeat, Math.max(0.2, sectionBeats - 0.3), rand, settings, prevChord, section, nextChord);
       });
       const accents = sectionBeats <= 2 ? [0.75, 1.5] : [0.75, 1.5, 2.5, 3.25];
       accents.forEach((offset, step) => {
         const note = notes[(step + 1) % notes.length];
-        addEvent(events, { ...note, midi: note.midi + (step > 1 ? 12 : 0) }, index, (step + 1) % notes.length, baseBeat + offset, 0.52, rand, normalizedSettings, prevChord, section, nextChord);
+        addClassicEvent(events, { ...note, midi: note.midi + (step > 1 ? 12 : 0) }, index, (step + 1) % notes.length, baseBeat + offset, 0.52, rand, settings, prevChord, section, nextChord);
       });
     }
   });
+}
+
+function generateRoleBasedEvents(events, sections, settings, normalizedSeed) {
+  const rand = makeRandom(normalizedSeed);
+  const previousVoiceEvents = new Map();
+
+  sections.forEach((section, index) => {
+    const prevChord = sections[(index - 1 + sections.length) % sections.length];
+    const nextChord = sections[(index + 1) % sections.length];
+    const baseBeat = section.startBeat;
+    const sectionBeats = section.durationBeats;
+    const notes = section.notes.map((note) => ({
+      ...note,
+      harmonicRole: note.harmonicRole || assignHarmonicRole(note),
+    }));
+
+    if (settings.mode === "pad" || settings.mode === "evolve") {
+      const sustainedCount = settings.mode === "pad" ? Math.min(5, notes.length) : Math.min(4, notes.length);
+      for (let voiceIndex = 0; voiceIndex < sustainedCount; voiceIndex += 1) {
+        const baseNote = notes[voiceIndex % notes.length];
+        const previousEvent = previousVoiceEvents.get(voiceIndex) || null;
+        const sharedWithPrevious = Boolean(prevChord?.notes.some((candidate) => candidate.pc === baseNote.pc));
+        const sharedWithNext = Boolean(nextChord?.notes.some((candidate) => candidate.pc === baseNote.pc));
+        const role = baseNote.harmonicRole;
+        const motionType = pickMotionType(role, rand);
+        const carriedFromPrevious = Boolean(previousEvent) && shouldCarryForward(role, rand, { sharedWithPrevious, sharedWithNext });
+        const selected = previousEvent ? chooseMotionNote(notes, previousEvent, motionType, carriedFromPrevious) : baseNote;
+        const durationBeats = resolveDurationBeats(role, settings.mode, rand, {
+          sectionBeats,
+          remainingBeats: sectionBeats,
+        });
+
+        addRoleBasedEvent(events, selected, index, voiceIndex, baseBeat, Math.min(sectionBeats, durationBeats), rand, settings, prevChord, section, nextChord, {
+          motionType,
+          carriedFromPrevious,
+        });
+
+        previousVoiceEvents.set(voiceIndex, {
+          midi: selected.midi,
+          role,
+        });
+      }
+    }
+
+    if (settings.mode === "arp") {
+      const previousSection = sections[index - 1];
+      const arpNotes = buildArpOrder(notes, section, settings, previousSection, normalizedSeed);
+      const offsets = getArpStepOffsets(sectionBeats, settings);
+      for (let step = 0; step < offsets.length; step += 1) {
+        const voiceId = step % arpNotes.length;
+        const note = arpNotes[voiceId];
+        const role = note.harmonicRole;
+        const previousEvent = previousVoiceEvents.get(voiceId) || null;
+        const sharedWithPrevious = Boolean(prevChord?.notes.some((candidate) => candidate.pc === note.pc));
+        const sharedWithNext = Boolean(nextChord?.notes.some((candidate) => candidate.pc === note.pc));
+        const motionType = pickMotionType(role, rand);
+        const carriedFromPrevious = Boolean(previousEvent) && shouldCarryForward(role, rand, { sharedWithPrevious, sharedWithNext });
+        const selected = previousEvent ? chooseMotionNote(arpNotes, previousEvent, motionType, carriedFromPrevious) : note;
+        const durationBeats = resolveDurationBeats(role, "arp", rand, {
+          sectionBeats,
+          remainingBeats: Math.max(0.25, sectionBeats - offsets[step]),
+        });
+
+        addRoleBasedEvent(events, selected, index, voiceId, baseBeat + offsets[step], durationBeats, rand, settings, prevChord, section, nextChord, {
+          motionType,
+          carriedFromPrevious,
+        });
+
+        previousVoiceEvents.set(voiceId, {
+          midi: selected.midi,
+          role,
+        });
+      }
+    }
+
+    if (settings.mode === "evolve") {
+      const accents = sectionBeats <= 2 ? [0.75, 1.5] : [0.75, 1.5, 2.5, 3.25];
+      accents.forEach((offset, step) => {
+        if (offset >= sectionBeats) return;
+        const accentSource = notes[(step + 1) % notes.length];
+        const accentRole = accentSource.harmonicRole === "anchor" ? "color" : accentSource.harmonicRole;
+        const motionType = pickMotionType(accentRole, rand);
+        const accentNotes = notes.filter((note) => note.harmonicRole !== "anchor");
+        const selected = pickClosestNote(accentNotes.length ? accentNotes : notes, accentSource.midi);
+        addRoleBasedEvent(events, { ...selected, harmonicRole: accentRole, midi: selected.midi + (step > 1 ? 12 : 0) }, index, (step + 1) % notes.length, baseBeat + offset, 0.45, rand, settings, prevChord, section, nextChord, {
+          motionType,
+          carriedFromPrevious: false,
+        });
+      });
+    }
+  });
+}
+
+export function generatePattern(settings = {}, progression = defaultProgression, seed = 1) {
+  const normalizedSettings = normalizeSettings(settings);
+  const normalizedProgression = normalizeProgression(progression);
+  const normalizedSeed = seedToInt(seed);
+  const sections = buildSections(normalizedProgression, normalizedSettings, normalizedSeed);
+  const events = [];
+
+  if (normalizedSettings.generatorMode === "roleBased") {
+    generateRoleBasedEvents(events, sections, normalizedSettings, normalizedSeed);
+  } else {
+    generateClassicEvents(events, sections, normalizedSettings, normalizedSeed);
+  }
 
   return {
     seed: normalizedSeed,

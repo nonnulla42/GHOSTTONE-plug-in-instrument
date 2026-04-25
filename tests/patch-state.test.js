@@ -35,6 +35,7 @@ test("normalizes unsafe patch values", () => {
         mode: "wrong",
         sound: "wrong",
         core: {
+          generatorMode: "chaos",
           ghostAmount: 200,
           drift: -4,
           colorMode: "wrong",
@@ -51,6 +52,7 @@ test("normalizes unsafe patch values", () => {
   assert.equal(restored.slots.B.seed, 1);
   assert.equal(restored.slots.B.bpm, 240);
   assert.equal(restored.slots.B.mode, "pad");
+  assert.equal(restored.slots.B.core.generatorMode, "classic");
   assert.equal(restored.slots.B.core.ghostAmount, 100);
   assert.equal(restored.slots.B.core.drift, 0);
   assert.equal(restored.slots.B.soundControls.cutoff, 6400);
@@ -79,12 +81,24 @@ test("patch conversion feeds core, progression, and sound adapters", () => {
   const patch = createPatchFromPreset(PRESETS[0]);
 
   assert.equal(patchToCoreSettings(patch).ghostAmount, 0.48);
+  assert.equal(patchToCoreSettings(patch).generatorMode, "classic");
   assert.equal(patchToCoreSettings(patch).mode, "pad");
   assert.equal(patchToSoundSettings(patch).space, 0.18);
   assert.deepEqual(
     patchToProgression(patch).map((bar) => bar.slots[0].chord),
     ["Am9", "Fmaj7", "Cadd9", "Gsus4"],
   );
+});
+
+test("patch conversion preserves role-based generator mode", () => {
+  const patch = createDefaultPatch({
+    core: {
+      ...createDefaultPatch().core,
+      generatorMode: "roleBased",
+    },
+  });
+
+  assert.equal(patchToCoreSettings(patch).generatorMode, "roleBased");
 });
 
 test("split bars include the second chord slot in progression conversion", () => {

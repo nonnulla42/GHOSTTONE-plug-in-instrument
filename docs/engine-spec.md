@@ -278,3 +278,47 @@ UI edit
 Patch JSON export/import serializes the full patch state, including compare slots.
 
 See `docs/plugin-body-spec.md` for the future processor/editor split.
+
+## Offline Render Plan
+
+`src/render/offline-render-plan.js` defines the deterministic offline scheduling path.
+
+It takes a patch and render context, then returns pure data:
+
+- render metadata
+- generated core pattern
+- fixed sample blocks
+- scheduled events per block
+
+It does not render audio yet. It answers which events would be rendered in which blocks at which sample offsets.
+
+See `docs/offline-render-spec.md`.
+
+## Offline Audio Renderer
+
+`src/render/offline-audio-renderer.js` is the first pure audio renderer.
+
+It consumes the offline render plan and writes deterministic Float32 audio buffers. It does not use Web Audio, DAW APIs, or plugin wrappers.
+
+Current scope:
+
+- oscillator sample generation
+- envelope
+- cents and drift
+- simple stereo pan
+- block-by-block voice continuity
+- finite deterministic output buffers
+
+See `docs/offline-audio-renderer-spec.md`.
+
+## WAV Export
+
+`src/render/wav-export.js` is the file-format layer above offline audio rendering.
+
+It keeps rendering and export separate:
+
+- `renderOfflineAudio(...)` creates deterministic Float32 buffers
+- `encodeWav(audio)` converts those buffers into PCM WAV bytes
+- `renderOfflineWav(...)` is a convenience wrapper for both steps
+
+See `docs/wav-export-spec.md`.

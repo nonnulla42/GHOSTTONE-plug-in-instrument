@@ -95,6 +95,7 @@ export class GridVisualizer {
       const top = 8 + (1 - (event.midi - minMidi) / midiSpan) * 84;
       const hue = 170 + clamp(event.cents, -60, 60) * 1.6;
       const driftText = event.driftAmount >= 1 ? ` -> ${Math.round(event.driftEnd)}` : "";
+      const carryText = event.carriedFromPrevious ? " | carried" : "";
 
       block.className = `note-block role-${event.role}`;
       block.style.left = `${left}%`;
@@ -102,7 +103,7 @@ export class GridVisualizer {
       block.style.top = `${clamp(top, 8, 92)}%`;
       block.style.background = `hsl(${hue}, 68%, 68%)`;
       block.style.setProperty("--drift", Math.min(1, event.driftAmount / 18).toFixed(2));
-      block.title = `${event.sectionLabel} | ${event.noteName}${event.degree} | ${event.role} | cents ${Math.round(event.cents)}${driftText}`;
+      block.title = `${event.sectionLabel} | ${event.noteName}${event.degree} | ${event.role} | ${event.motionType}${carryText} | cents ${Math.round(event.cents)}${driftText}`;
       block.textContent = `${event.noteName} ${Math.round(event.cents)}`;
       grid.appendChild(block);
     });
@@ -128,4 +129,3 @@ export class GridVisualizer {
     playhead.style.left = `${(beat / this.pattern.loopBeats) * 100}%`;
   }
 }
-

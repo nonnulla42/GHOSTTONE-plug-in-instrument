@@ -35,3 +35,6 @@ See:
 - `docs/plugin-first-roadmap.md`
 - `docs/engine-spec.md`
 - `docs/plugin-body-spec.md`
+- `docs/offline-render-spec.md`
+- `docs/offline-audio-renderer-spec.md`
+- `docs/wav-export-spec.md`

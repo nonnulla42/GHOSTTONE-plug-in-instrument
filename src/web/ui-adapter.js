@@ -3,12 +3,14 @@ export function getElements(root = document) {
     playButton: root.querySelector("#playButton"),
     generateButton: root.querySelector("#generateButton"),
     exportButton: root.querySelector("#exportButton"),
+    exportWavButton: root.querySelector("#exportWavButton"),
     presetSelect: root.querySelector("#presetSelect"),
     compareButtons: [...root.querySelectorAll(".compare-button")],
     seedValue: root.querySelector("#seedValue"),
     exportPatchButton: root.querySelector("#exportPatchButton"),
     importPatchButton: root.querySelector("#importPatchButton"),
     importPatchFile: root.querySelector("#importPatchFile"),
+    generatorButtons: [...root.querySelectorAll(".generator-segment")],
     bpm: root.querySelector("#bpm"),
     chordInputs: [...root.querySelectorAll(".chord-input")],
     splitButtons: [...root.querySelectorAll(".split-button")],
@@ -71,8 +73,9 @@ export function readBpm(els) {
   return clamp(Number(els.bpm.value) || 92, 40, 180);
 }
 
-export function readCoreSettings(els, mode) {
+export function readCoreSettings(els, mode, generatorMode = "classic") {
   return {
+    generatorMode,
     mode,
     ghostAmount: Number(els.ghostAmount.value) / 100,
     drift: Number(els.drift.value) / 100,
@@ -183,10 +186,14 @@ export function updateReadouts(els, pattern, settings, bpm, soundSettings, curre
   els.rangeReadout.textContent = `+/-${Math.round(maxOffset)} cents`;
   els.eventReadout.textContent = String(pattern.events.length);
   els.currentChord.textContent = pattern.sections[currentSectionIndex]?.label || "-";
-  els.patternTitle.textContent = `${capitalize(settings.colorMode)} ${settings.mode} at ${bpm} BPM`;
+  els.patternTitle.textContent = `${capitalize(settings.colorMode)} ${formatGeneratorMode(settings.generatorMode)} ${settings.mode} at ${bpm} BPM`;
   if (els.seedValue) els.seedValue.textContent = String(pattern.seed);
 }
 
 function capitalize(value) {
   return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatGeneratorMode(value) {
+  return value === "roleBased" ? "role-based" : "classic";
 }

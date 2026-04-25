@@ -197,7 +197,8 @@ h2 {
 .secondary-button,
 .icon-button,
 .segment,
-.sound-segment {
+.sound-segment,
+.generator-segment {
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--text);
@@ -361,8 +362,13 @@ h2 {
   background: rgba(0, 0, 0, 0.17);
 }
 
+.segmented.two-up {
+  grid-template-columns: repeat(2, 1fr);
+}
+
 .segment,
-.sound-segment {
+.sound-segment,
+.generator-segment {
   min-height: 38px;
   border-color: transparent;
   background: transparent;
@@ -370,7 +376,8 @@ h2 {
 }
 
 .segment.active,
-.sound-segment.active {
+.sound-segment.active,
+.generator-segment.active {
   background: rgba(139, 214, 199, 0.16);
   color: var(--text);
 }
@@ -530,6 +537,11 @@ input[type="checkbox"] {
 
 .note-block.role-stable {
   color: #10211d;
+}
+
+.note-block.role-anchor {
+  color: #10211d;
+  outline: 1px solid rgba(240, 195, 107, 0.2);
 }
 
 .note-block.role-tension {
