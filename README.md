@@ -1,26 +1,34 @@
-# GhostTone
+# GhostTone Plugin Core
 
-GhostTone is a small chord-aware microtonal companion prototype.
+GhostTone is moving toward an instrument plugin: a host-synced generative microtonal instrument with a simple internal sound engine.
 
-Open `index.html` in a browser, press `Play`, then move:
+This repo now prioritizes the plugin-first musical core over the browser prototype.
 
-- `Ghost Amount` for microtonal intensity.
-- `Drift` for slow pitch movement.
-- `Harmony Lock` for safer chord-following behavior.
-- `Ghost preview` to A/B normal tuning against the microtonal version.
-- `BPM` to set the loop tempo.
-- `Split` on a bar to add a second chord in the same bar.
-- `Voice` on a chord slot to randomize voicing inside the current voicing constraints.
-- `Arp` on a chord slot to randomize arpeggio order inside the current arp constraints.
-- `Voicing Style`, `Variation`, and `Continuity` control chord layout and voice-leading.
-- `Arp Direction`, `Feel`, `Density`, `Variation`, and `Continuity` control arpeggio contour and rhythm.
+## Core
 
-The main display is now a MIDI-style grid:
+The first extracted module is:
 
-- horizontal position is time over four bars.
-- vertical position is pitch.
-- note blocks show note name and cents offset.
-- connection lines show voice-leading between generated events.
-- heavier/dashed connection lines and brighter note borders indicate more drift.
+```txt
+src/core/ghosttone-core.js
+```
 
-The MIDI export writes a standard `.mid` file with pitch bend messages spread across channels, so microtonal notes can survive the trip into a DAW. Set the receiving instrument pitch bend range to `+/-2 semitones` for the closest result.
+It exposes:
+
+```js
+generatePattern(settings, progression, seed)
+```
+
+The core is deterministic and beat-based. It does not know about browser UI, Web Audio, MIDI export, or BPM in seconds.
+
+## Test
+
+```txt
+npm test
+```
+
+The tests currently verify chord parsing, deterministic generation, and the fixed event schema.
+
+## Roadmap
+
+See `docs/plugin-first-roadmap.md`.
+
