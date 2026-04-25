@@ -30,5 +30,7 @@ The tests currently verify chord parsing, deterministic generation, and the fixe
 
 ## Roadmap
 
-See `docs/plugin-first-roadmap.md`.
+See:
 
+- `docs/plugin-first-roadmap.md`
+- `docs/engine-spec.md`

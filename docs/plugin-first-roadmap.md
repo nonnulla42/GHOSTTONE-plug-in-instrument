@@ -55,10 +55,11 @@ Each event uses the plugin-facing schema:
 
 ## Next Steps
 
-1. Keep expanding tests around deterministic generation.
-2. Add a plugin-style audio adapter that converts beat events to sample positions from host tempo.
-3. Define a minimal internal synth spec: oscillator, envelope, filter, gain, moderate width.
+1. Keep expanding tests around deterministic generation and musical behavior.
+2. Define a minimal internal synth spec for the plugin: oscillator, envelope, filter, gain, moderate width.
+3. Expand the host-time adapter to handle loop wrap and host transport edge cases.
 4. Decide whether the first plugin prototype is a JUCE/C++ port or an intermediate host wrapper.
 
 The important rule: same settings, same progression, same seed, same events.
 
+See `docs/engine-spec.md` for the current engine contract.

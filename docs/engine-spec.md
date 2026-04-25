@@ -1,0 +1,151 @@
+# GhostTone Engine Spec
+
+This document describes the headless GhostTone engine contract.
+
+## API
+
+```js
+generatePattern(settings, progression, seed)
+```
+
+The engine is a pure musical generator. It does not read UI controls, schedule audio, export MIDI, or know the host BPM.
+
+## Input
+
+### `settings`
+
+Core musical controls:
+
+- `mode`: `pad`, `arp`, or `evolve`
+- `ghostAmount`: microtonal intensity, normalized `0..1`
+- `drift`: pitch movement amount, normalized `0..1`
+- `harmonyLock`: how strongly offsets stay close to harmonic context, normalized `0..1`
+- `colorMode`: `warm`, `dreamy`, `dark`, or `alien`
+- `stayMusical`: constrains more unstable offset choices
+- `ghostEnabled`: bypasses micro offsets when false
+- `voicingStyle`: chord layout strategy
+- `voicingVariation`: amount of voicing reshuffle, normalized `0..1`
+- `voicingContinuity`: strength of voice-leading continuity, normalized `0..1`
+- `arpDirection`: arp ordering strategy
+- `arpFeel`: rhythmic feel strategy
+- `arpDensity`: event count density, normalized `0..1`
+- `arpVariation`: arp reshuffle amount, normalized `0..1`
+- `arpContinuity`: strength of arp contour continuity, normalized `0..1`
+
+### `progression`
+
+Array of bars:
+
+```js
+[
+  {
+    split: false,
+    slots: [
+      { chord: "Am9", voicingSeed: 0, arpSeed: 0 }
+    ]
+  }
+]
+```
+
+When `split` is true, the first two slots divide the bar equally.
+
+### `seed`
+
+Positive integer seed. Same settings, same progression, and same seed must produce the same result.
+
+## Output
+
+```js
+{
+  seed,
+  settings,
+  progression,
+  loopBeats,
+  sections,
+  events
+}
+```
+
+### Sections
+
+A section is one chord slot placed on the beat grid:
+
+```js
+{
+  label,
+  rootPc,
+  notes,
+  baseNotes,
+  barIndex,
+  slotIndex,
+  startBeat,
+  durationBeats,
+  slotState
+}
+```
+
+### Events
+
+Each event is a note-like instruction for an adapter:
+
+```js
+{
+  id,
+  sectionIndex,
+  sectionLabel,
+  voiceId,
+  noteName,
+  midi,
+  startBeat,
+  durationBeats,
+  cents,
+  driftAmount,
+  driftEnd,
+  role,
+  degree,
+  motionType,
+  velocity
+}
+```
+
+## Field Semantics
+
+- `voiceId`: logical voice lane used for voice-leading, visual connection, and future synth allocation.
+- `midi`: equal-tempered MIDI note before microtonal offset.
+- `cents`: starting pitch offset in cents relative to `midi`.
+- `driftEnd`: ending pitch offset in cents.
+- `driftAmount`: absolute distance between `cents` and `driftEnd`.
+- `role`: harmonic role, currently `stable`, `color`, `tension`, or `passing`.
+- `motionType`: the generation mode that produced the event.
+- `startBeat` and `durationBeats`: musical time in beats, not seconds or samples.
+
+## Invariants
+
+- The engine is deterministic.
+- Musical time is always beat-based.
+- The engine does not know DOM, canvas, Web Audio, MIDI files, or plugin host APIs.
+- Adapters are responsible for converting beats to seconds, samples, pixels, MIDI ticks, or host timeline positions.
+- The event schema is the contract between the engine and every future body: browser, tests, or plugin.
+
+## Host-Time Adapter
+
+`src/adapters/host-time-adapter.js` is the first plugin-facing timing adapter.
+
+It converts beat-based core events into block-local sample positions:
+
+```js
+scheduleEventsForBlock(events, {
+  bpm,
+  sampleRate,
+  blockSize,
+  blockStartBeat
+})
+```
+
+It returns events with:
+
+- `sampleOffset`: start position inside the current audio block
+- `durationSamples`: event duration in samples
+- `blockStartBeat`: source host beat for the block
+
+This mirrors the future plugin responsibility: read host transport/tempo, keep the core in beats, and schedule synth voices in sample time.
