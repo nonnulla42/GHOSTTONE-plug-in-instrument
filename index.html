@@ -124,10 +124,20 @@
             <div class="section-label">
               <span>Generator</span>
             </div>
-            <div class="segmented two-up" role="group" aria-label="Generator mode">
+            <div class="segmented" role="group" aria-label="Generator mode">
               <button class="generator-segment active" data-generator-mode="classic" type="button">Classic</button>
               <button class="generator-segment" data-generator-mode="roleBased" type="button">Role-based</button>
+              <button class="generator-segment" data-generator-mode="infinite" type="button">Infinite</button>
             </div>
+            <label class="select-row">
+              <span>Harmonic Motion</span>
+              <select id="harmonicMotion">
+                <option value="static">Static</option>
+                <option value="subtle" selected>Subtle</option>
+                <option value="evolving">Evolving</option>
+                <option value="restless">Restless</option>
+              </select>
+            </label>
           </div>
 
           <div class="panel-block">

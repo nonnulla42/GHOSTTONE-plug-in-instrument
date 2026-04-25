@@ -148,6 +148,25 @@ test("role-based generator stays deterministic with same seed", () => {
   assert.deepEqual(second, first);
 });
 
+test("infinite generator evolves sections deterministically and preserves anchors", () => {
+  const settings = {
+    generatorMode: "infinite",
+    harmonicMotion: "evolving",
+    mode: "evolve",
+    ghostAmount: 0.72,
+    drift: 0.38,
+    harmonyLock: 0.52,
+    stayMusical: true,
+  };
+
+  const first = generatePattern(settings, progression, 12012);
+  const second = generatePattern(settings, progression, 12012);
+
+  assert.deepEqual(second, first);
+  assert.ok(first.sections.every((section) => section.notes.some((note) => note.harmonicRole === "anchor")));
+  assert.ok(first.sections.slice(1).some((section) => (section.state?.movedVoices || 0) > 0));
+});
+
 function range(values) {
   return Math.max(...values) - Math.min(...values);
 }

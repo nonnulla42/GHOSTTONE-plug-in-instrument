@@ -6,6 +6,7 @@ import {
   resolveDurationBeats,
   shouldCarryForward,
 } from "./harmonic-roles.js";
+import { buildInfiniteSections } from "./harmonic-infinite.js";
 
 const noteMap = {
   C: 0,
@@ -45,6 +46,7 @@ const roleIntensity = {
 
 export const defaultSettings = Object.freeze({
   generatorMode: "classic",
+  harmonicMotion: "subtle",
   mode: "pad",
   ghostAmount: 0.48,
   drift: 0.35,
@@ -110,7 +112,8 @@ function normalizeSettings(settings = {}) {
   const merged = { ...defaultSettings, ...settings };
   return {
     ...merged,
-    generatorMode: ["classic", "roleBased"].includes(merged.generatorMode) ? merged.generatorMode : defaultSettings.generatorMode,
+    generatorMode: ["classic", "roleBased", "infinite"].includes(merged.generatorMode) ? merged.generatorMode : defaultSettings.generatorMode,
+    harmonicMotion: ["static", "subtle", "evolving", "restless"].includes(merged.harmonicMotion) ? merged.harmonicMotion : defaultSettings.harmonicMotion,
     mode: ["pad", "arp", "evolve"].includes(merged.mode) ? merged.mode : defaultSettings.mode,
     ghostAmount: normalizeUnit(merged.ghostAmount, defaultSettings.ghostAmount),
     drift: normalizeUnit(merged.drift, defaultSettings.drift),
@@ -687,10 +690,14 @@ export function generatePattern(settings = {}, progression = defaultProgression,
   const normalizedSettings = normalizeSettings(settings);
   const normalizedProgression = normalizeProgression(progression);
   const normalizedSeed = seedToInt(seed);
-  const sections = buildSections(normalizedProgression, normalizedSettings, normalizedSeed);
+  let sections = buildSections(normalizedProgression, normalizedSettings, normalizedSeed);
   const events = [];
 
-  if (normalizedSettings.generatorMode === "roleBased") {
+  if (normalizedSettings.generatorMode === "infinite") {
+    sections = buildInfiniteSections(sections, normalizedSettings, normalizedSeed, makeRandom);
+  }
+
+  if (normalizedSettings.generatorMode === "roleBased" || normalizedSettings.generatorMode === "infinite") {
     generateRoleBasedEvents(events, sections, normalizedSettings, normalizedSeed);
   } else {
     generateClassicEvents(events, sections, normalizedSettings, normalizedSeed);

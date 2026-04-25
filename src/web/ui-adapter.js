@@ -20,6 +20,7 @@ export function getElements(root = document) {
     drift: root.querySelector("#drift"),
     harmonyLock: root.querySelector("#harmonyLock"),
     colorMode: root.querySelector("#colorMode"),
+    harmonicMotion: root.querySelector("#harmonicMotion"),
     stayMusical: root.querySelector("#stayMusical"),
     ghostEnabled: root.querySelector("#ghostEnabled"),
     voicingStyle: root.querySelector("#voicingStyle"),
@@ -81,6 +82,7 @@ export function readCoreSettings(els, mode, generatorMode = "classic") {
     drift: Number(els.drift.value) / 100,
     harmonyLock: Number(els.harmonyLock.value) / 100,
     colorMode: els.colorMode.value,
+    harmonicMotion: els.harmonicMotion.value,
     stayMusical: els.stayMusical.checked,
     ghostEnabled: els.ghostEnabled.checked,
     voicingStyle: els.voicingStyle.value,
@@ -195,5 +197,6 @@ function capitalize(value) {
 }
 
 function formatGeneratorMode(value) {
+  if (value === "infinite") return "infinite";
   return value === "roleBased" ? "role-based" : "classic";
 }

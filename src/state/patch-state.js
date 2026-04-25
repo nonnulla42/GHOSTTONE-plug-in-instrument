@@ -20,6 +20,7 @@ export const DEFAULT_PATCH = Object.freeze({
   ]),
   core: Object.freeze({
     generatorMode: "classic",
+    harmonicMotion: "subtle",
     ghostAmount: 48,
     drift: 35,
     harmonyLock: 68,
@@ -126,6 +127,7 @@ export function patchToCoreSettings(patch) {
   const normalized = normalizePatch(patch);
   return {
     generatorMode: normalized.core.generatorMode,
+    harmonicMotion: normalized.core.harmonicMotion,
     mode: normalized.mode,
     ghostAmount: normalized.core.ghostAmount / 100,
     drift: normalized.core.drift / 100,
@@ -228,7 +230,8 @@ export function clonePatchState(state) {
 
 function normalizeCore(core = {}) {
   return {
-    generatorMode: ["classic", "roleBased"].includes(core.generatorMode) ? core.generatorMode : DEFAULT_PATCH.core.generatorMode,
+    generatorMode: ["classic", "roleBased", "infinite"].includes(core.generatorMode) ? core.generatorMode : DEFAULT_PATCH.core.generatorMode,
+    harmonicMotion: ["static", "subtle", "evolving", "restless"].includes(core.harmonicMotion) ? core.harmonicMotion : DEFAULT_PATCH.core.harmonicMotion,
     ghostAmount: clampNumber(core.ghostAmount, 0, 100, DEFAULT_PATCH.core.ghostAmount),
     drift: clampNumber(core.drift, 0, 100, DEFAULT_PATCH.core.drift),
     harmonyLock: clampNumber(core.harmonyLock, 0, 100, DEFAULT_PATCH.core.harmonyLock),

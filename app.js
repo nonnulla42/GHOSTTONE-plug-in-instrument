@@ -309,6 +309,7 @@ function bindEvents() {
     els.drift,
     els.harmonyLock,
     els.colorMode,
+    els.harmonicMotion,
     els.stayMusical,
     els.ghostEnabled,
     els.voicingStyle,
