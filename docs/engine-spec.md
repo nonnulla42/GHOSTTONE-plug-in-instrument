@@ -182,3 +182,23 @@ core events in beats
 -> sample offsets
 -> synth voices
 ```
+
+## Voice Lifecycle
+
+`src/audio/voice-manager.js` is the first pure voice lifecycle module.
+
+It does not create audio nodes. It tracks synth voice state:
+
+- `scheduled`: the voice has been assigned but its start time is still in the future
+- `active`: the voice is sounding
+- `releasing`: the voice has reached release time and is fading out
+
+The manager is responsible for:
+
+- creating voice records from scheduled events
+- advancing voice state over time
+- removing finished voices
+- early release
+- basic voice stealing when `maxVoices` is reached
+
+The Web Audio engine uses this manager while still producing sound with browser oscillators. A future plugin synth can reuse the same lifecycle rules with native DSP voices.

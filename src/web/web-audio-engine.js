@@ -1,4 +1,5 @@
 import { scheduleEventsForBlock, samplesToBeats } from "../adapters/host-time-adapter.js";
+import { VoiceManager } from "../audio/voice-manager.js";
 
 export function getBrowserScheduleBlock({ audioCurrentTime, loopStartTime, bpm, sampleRate, loopBeats, lookaheadSeconds }) {
   const elapsedSeconds = Math.max(0, audioCurrentTime - loopStartTime);
@@ -43,6 +44,7 @@ export class WebAudioEngine {
     this.loopStartTime = 0;
     this.isPlaying = false;
     this.lastScheduledBeat = null;
+    this.voiceManager = new VoiceManager({ maxVoices: 48 });
     this.activeVoiceCount = 0;
   }
 
@@ -73,6 +75,7 @@ export class WebAudioEngine {
     this.isPlaying = true;
     this.loopStartTime = ctx.currentTime + 0.05;
     this.lastScheduledBeat = null;
+    this.voiceManager.clear();
     this.tick(pattern, coreSettings, soundSettings, bpm);
   }
 
@@ -81,6 +84,7 @@ export class WebAudioEngine {
     clearTimeout(this.timer);
     this.timer = null;
     this.activeVoiceCount = 0;
+    this.voiceManager.clear();
     this.audio?.ctx.close();
     this.audio = null;
   }
@@ -95,6 +99,7 @@ export class WebAudioEngine {
     if (!this.isPlaying) return;
 
     const { ctx } = this.setup();
+    this.voiceManager.advanceTo(ctx.currentTime);
     const blockContext = getNextBrowserScheduleBlock({
       audioCurrentTime: ctx.currentTime,
       loopStartTime: this.loopStartTime,
@@ -112,6 +117,7 @@ export class WebAudioEngine {
       this.playVoice(event, when, durationSeconds, coreSettings, soundSettings);
     });
 
+    this.activeVoiceCount = this.voiceManager.getVoiceCount();
     this.lastScheduledBeat = blockContext.blockStartBeat + samplesToBeats(blockContext.blockSize, bpm, ctx.sampleRate);
     clearTimeout(this.timer);
     this.timer = setTimeout(() => this.tick(pattern, coreSettings, soundSettings, bpm), this.tickMs);
@@ -132,8 +138,14 @@ export class WebAudioEngine {
     const voiceScale = soundSettings.sound === "pluck" ? 0.2 : 0.14;
     const peak = event.velocity * voiceScale;
     const pan = Math.max(-0.35, Math.min(0.35, (event.voiceId - 2) * 0.08 * soundSettings.space));
+    const voice = this.voiceManager.startVoice(event, {
+      startTime: when,
+      currentTime: ctx.currentTime,
+      durationSeconds,
+      releaseSeconds: release + 0.05,
+    });
 
-    this.activeVoiceCount += 1;
+    this.activeVoiceCount = this.voiceManager.getVoiceCount();
     osc.type = soundSettings.waveform;
     osc.frequency.setValueAtTime(startFreq, when);
     if (durationSeconds > 0.45) {
@@ -155,7 +167,8 @@ export class WebAudioEngine {
     osc.start(when);
     osc.stop(when + durationSeconds + release + 0.05);
     osc.addEventListener("ended", () => {
-      this.activeVoiceCount = Math.max(0, this.activeVoiceCount - 1);
+      this.voiceManager.finishVoice(voice.id);
+      this.activeVoiceCount = this.voiceManager.getVoiceCount();
     });
   }
 
