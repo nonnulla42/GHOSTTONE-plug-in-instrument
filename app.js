@@ -39,6 +39,12 @@ const els = getElements();
 const audio = new WebAudioAdapter();
 const visualizer = new GridVisualizer(els.gridView);
 
+audio.onPatternExtended = (pattern) => {
+  state.pattern = pattern;
+  updateReadouts(els, state.pattern, patchToCoreSettings(activePatch()), activePatch().bpm, patchToSoundSettings(activePatch()), state.currentSectionIndex);
+  visualizer.render(state.pattern, state.currentSectionIndex, getVisualBeat());
+};
+
 function activePatch() {
   return getActivePatch(state.patchState);
 }
@@ -64,11 +70,16 @@ function rebuildPattern({ restartAudio = true } = {}) {
   if (state.currentSectionIndex >= state.pattern.sections.length) state.currentSectionIndex = 0;
 
   updateReadouts(els, state.pattern, coreSettings, patch.bpm, soundSettings, state.currentSectionIndex);
-  visualizer.render(state.pattern, state.currentSectionIndex);
+  visualizer.render(state.pattern, state.currentSectionIndex, getVisualBeat(patch.bpm));
 
   if (restartAudio) {
     audio.restart(state.pattern, coreSettings, soundSettings, patch.bpm);
   }
+}
+
+function getVisualBeat(bpm = activePatch().bpm) {
+  if (!audio.isPlaying || !state.pattern) return visualizer.currentBeat || 0;
+  return audio.getCurrentBeat(bpm, state.pattern) ?? visualizer.currentBeat ?? 0;
 }
 
 function refreshSoundOnly({ restartAudio = true } = {}) {
@@ -141,7 +152,7 @@ async function togglePlay() {
 
 function animate() {
   const patch = activePatch();
-  const beat = audio.getCurrentBeat(patch.bpm, state.pattern.loopBeats);
+  const beat = audio.getCurrentBeat(patch.bpm, state.pattern);
   visualizer.updatePlayhead(beat);
 
   if (beat !== null) {
@@ -330,7 +341,7 @@ function bindEvents() {
   });
 
   window.addEventListener("resize", () => {
-    if (state.pattern) visualizer.render(state.pattern, state.currentSectionIndex);
+    if (state.pattern) visualizer.render(state.pattern, state.currentSectionIndex, getVisualBeat());
   });
 }
 

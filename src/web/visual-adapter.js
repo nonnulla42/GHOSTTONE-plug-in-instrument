@@ -1,24 +1,62 @@
 import { clamp } from "./ui-adapter.js";
 
+export const VIEW_BEATS_BEFORE = 4;
+export const VIEW_BEATS_AFTER = 4;
+
+export function getVisibleBeatRange(currentBeat = 0, before = VIEW_BEATS_BEFORE, after = VIEW_BEATS_AFTER) {
+  const beat = Number.isFinite(currentBeat) ? currentBeat : 0;
+  return {
+    startBeat: beat - before,
+    endBeat: beat + after,
+  };
+}
+
+export function isEventVisible(event, range) {
+  return event.startBeat + event.durationBeats >= range.startBeat && event.startBeat <= range.endBeat;
+}
+
+export function beatToViewportX(beat, range) {
+  return ((beat - range.startBeat) / Math.max(0.001, range.endBeat - range.startBeat)) * 100;
+}
+
 export class GridVisualizer {
   constructor(grid) {
     this.grid = grid;
     this.pattern = null;
     this.currentSectionIndex = 0;
+    this.currentBeat = 0;
+    this.visualBeat = 0;
+    this.lastRenderedBeat = null;
   }
 
-  render(pattern, currentSectionIndex = this.currentSectionIndex) {
+  render(pattern, currentSectionIndex = this.currentSectionIndex, currentBeat = this.currentBeat) {
     this.pattern = pattern;
     this.currentSectionIndex = currentSectionIndex;
+    this.currentBeat = Number.isFinite(currentBeat) ? currentBeat : 0;
+    this.visualBeat = this.currentBeat;
+    this.renderViewport(this.visualBeat);
+  }
+
+  renderViewport(currentBeat = this.visualBeat) {
+    if (!this.pattern) return;
+
     const grid = this.grid;
+    const pattern = this.pattern;
+    const range = getVisibleBeatRange(currentBeat);
+    const visibleEvents = pattern.events.filter((event) => isEventVisible(event, range));
+    const visibleSections = pattern.sections.filter((section) => section.startBeat + section.durationBeats >= range.startBeat && section.startBeat <= range.endBeat);
+    const midiSource = visibleEvents.length ? visibleEvents : pattern.events;
+
     grid.innerHTML = "";
 
-    const minMidi = pattern.events.length ? Math.max(36, Math.min(...pattern.events.map((event) => event.midi)) - 3) : 45;
-    const maxMidi = pattern.events.length ? Math.min(96, Math.max(...pattern.events.map((event) => event.midi)) + 3) : 84;
+    const minMidi = midiSource.length ? Math.max(36, Math.min(...midiSource.map((event) => event.midi)) - 3) : 45;
+    const maxMidi = midiSource.length ? Math.min(96, Math.max(...midiSource.map((event) => event.midi)) + 3) : 84;
     const midiSpan = Math.max(12, maxMidi - minMidi);
     const laneCount = midiSpan + 1;
 
     grid.style.setProperty("--lane-count", laneCount);
+    grid.dataset.viewStartBeat = range.startBeat.toFixed(2);
+    grid.dataset.viewEndBeat = range.endBeat.toFixed(2);
 
     const lineLayer = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     lineLayer.classList.add("connection-layer");
@@ -35,29 +73,34 @@ export class GridVisualizer {
     playhead.id = "gridPlayhead";
     playhead.className = "grid-playhead";
 
-    for (let beat = 0; beat <= pattern.loopBeats; beat += 1) {
+    const firstMarkerBeat = Math.floor(range.startBeat);
+    const lastMarkerBeat = Math.ceil(range.endBeat);
+    for (let beat = firstMarkerBeat; beat <= lastMarkerBeat; beat += 1) {
       const marker = document.createElement("div");
       marker.className = beat % 4 === 0 ? "beat-marker strong" : "beat-marker";
-      marker.style.left = `${(beat / pattern.loopBeats) * 100}%`;
+      marker.style.left = `${beatToViewportX(beat, range)}%`;
       beatLayer.appendChild(marker);
     }
 
-    pattern.sections.forEach((section, index) => {
+    visibleSections.forEach((section) => {
       const band = document.createElement("div");
-      band.className = `section-band ${index === this.currentSectionIndex ? "active" : ""}`;
-      band.style.left = `${(section.startBeat / pattern.loopBeats) * 100}%`;
-      band.style.width = `${(section.durationBeats / pattern.loopBeats) * 100}%`;
+      const sectionIndex = section.sectionIndex ?? pattern.sections.indexOf(section);
+      const left = clamp(beatToViewportX(section.startBeat, range), 0, 100);
+      const right = clamp(beatToViewportX(section.startBeat + section.durationBeats, range), 0, 100);
+      band.className = `section-band ${sectionIndex === this.currentSectionIndex ? "active" : ""}`;
+      band.style.left = `${left}%`;
+      band.style.width = `${Math.max(0.6, right - left)}%`;
       band.textContent = section.label;
       sectionLayer.appendChild(band);
     });
 
     const eventPosition = (event, useEnd = false) => ({
-      x: ((event.startBeat + (useEnd ? event.durationBeats : 0)) / pattern.loopBeats) * 100,
+      x: beatToViewportX(event.startBeat + (useEnd ? event.durationBeats : 0), range),
       y: 8 + (1 - (event.midi - minMidi) / midiSpan) * 84,
     });
 
     const chains = new Map();
-    pattern.events.forEach((event) => {
+    visibleEvents.forEach((event) => {
       if (!chains.has(event.voiceId)) chains.set(event.voiceId, []);
       chains.get(event.voiceId).push(event);
     });
@@ -88,10 +131,11 @@ export class GridVisualizer {
 
     grid.append(sectionLayer, beatLayer, lineLayer);
 
-    pattern.events.forEach((event) => {
+    visibleEvents.forEach((event) => {
       const block = document.createElement("div");
-      const left = (event.startBeat / pattern.loopBeats) * 100;
-      const width = Math.max(2.6, (event.durationBeats / pattern.loopBeats) * 100);
+      const left = clamp(beatToViewportX(event.startBeat, range), 0, 100);
+      const right = clamp(beatToViewportX(event.startBeat + event.durationBeats, range), 0, 100);
+      const width = Math.max(2.6, right - left);
       const top = 8 + (1 - (event.midi - minMidi) / midiSpan) * 84;
       const hue = 170 + clamp(event.cents, -60, 60) * 1.6;
       const driftText = event.driftAmount >= 1 ? ` -> ${Math.round(event.driftEnd)}` : "";
@@ -109,23 +153,38 @@ export class GridVisualizer {
     });
 
     grid.appendChild(playhead);
-    this.updatePlayhead(null);
+    playhead.hidden = false;
+    playhead.style.left = `${beatToViewportX(currentBeat, range)}%`;
+    this.lastRenderedBeat = currentBeat;
   }
 
   updateActiveSection(sectionIndex) {
     if (sectionIndex === this.currentSectionIndex) return;
     this.currentSectionIndex = sectionIndex;
-    if (this.pattern) this.render(this.pattern, sectionIndex);
+    if (this.pattern) this.renderViewport(this.visualBeat);
   }
 
   updatePlayhead(beat) {
-    const playhead = this.grid.querySelector("#gridPlayhead");
-    if (!playhead || beat === null || !this.pattern) {
-      if (playhead) playhead.hidden = true;
+    const existingPlayhead = this.grid.querySelector("#gridPlayhead");
+    if (beat === null || !this.pattern) {
+      if (existingPlayhead) existingPlayhead.hidden = true;
       return;
     }
 
-    playhead.hidden = false;
-    playhead.style.left = `${(beat / this.pattern.loopBeats) * 100}%`;
+    if (!existingPlayhead) return;
+
+    const actualBeat = Number.isFinite(beat) ? beat : 0;
+    const previousVisualBeat = Number.isFinite(this.visualBeat) ? this.visualBeat : actualBeat;
+    this.currentBeat = actualBeat;
+    this.visualBeat = previousVisualBeat + (actualBeat - previousVisualBeat) * 0.24;
+
+    if (this.lastRenderedBeat === null || Math.abs(this.visualBeat - this.lastRenderedBeat) >= 0.025) {
+      this.renderViewport(this.visualBeat);
+      return;
+    }
+
+    const range = getVisibleBeatRange(this.visualBeat);
+    existingPlayhead.hidden = false;
+    existingPlayhead.style.left = `${beatToViewportX(this.visualBeat, range)}%`;
   }
 }

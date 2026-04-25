@@ -372,7 +372,7 @@ function getArpDuration(sectionBeats, offsets, index, settings) {
   return Math.max(0.12, gap * (feelScale[settings.arpFeel] || 0.78));
 }
 
-function buildSections(progression, settings, seed) {
+export function buildSections(progression, settings, seed) {
   const sections = [];
   let previousNotes = null;
 
@@ -686,16 +686,10 @@ function generateRoleBasedEvents(events, sections, settings, normalizedSeed) {
   });
 }
 
-export function generatePattern(settings = {}, progression = defaultProgression, seed = 1) {
+export function buildPatternEventsForSections(sections, settings = {}, seed = 1) {
   const normalizedSettings = normalizeSettings(settings);
-  const normalizedProgression = normalizeProgression(progression);
   const normalizedSeed = seedToInt(seed);
-  let sections = buildSections(normalizedProgression, normalizedSettings, normalizedSeed);
   const events = [];
-
-  if (normalizedSettings.generatorMode === "infinite") {
-    sections = buildInfiniteSections(sections, normalizedSettings, normalizedSeed, makeRandom);
-  }
 
   if (normalizedSettings.generatorMode === "roleBased" || normalizedSettings.generatorMode === "infinite") {
     generateRoleBasedEvents(events, sections, normalizedSettings, normalizedSeed);
@@ -703,12 +697,31 @@ export function generatePattern(settings = {}, progression = defaultProgression,
     generateClassicEvents(events, sections, normalizedSettings, normalizedSeed);
   }
 
+  return events.sort((a, b) => a.startBeat - b.startBeat);
+}
+
+export function generatePattern(settings = {}, progression = defaultProgression, seed = 1) {
+  const normalizedSettings = normalizeSettings(settings);
+  const normalizedProgression = normalizeProgression(progression);
+  const normalizedSeed = seedToInt(seed);
+  const templateSections = buildSections(normalizedProgression, normalizedSettings, normalizedSeed);
+  let sections = templateSections;
+
+  if (normalizedSettings.generatorMode === "infinite") {
+    sections = buildInfiniteSections(sections, normalizedSettings, normalizedSeed, makeRandom);
+  }
+  const events = buildPatternEventsForSections(sections, normalizedSettings, normalizedSeed);
+  const templateLoopBeats = normalizedProgression.length * 4;
+
   return {
     seed: normalizedSeed,
     settings: normalizedSettings,
+    generatorMode: normalizedSettings.generatorMode,
     progression: normalizedProgression,
-    loopBeats: normalizedProgression.length * 4,
+    loopBeats: sections.reduce((max, section) => Math.max(max, section.startBeat + section.durationBeats), templateLoopBeats),
+    templateLoopBeats,
+    templateSections,
     sections,
-    events: events.sort((a, b) => a.startBeat - b.startBeat),
+    events,
   };
 }

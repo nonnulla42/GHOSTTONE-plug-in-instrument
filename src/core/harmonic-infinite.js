@@ -1,4 +1,5 @@
 import { assignHarmonicRole, pickMotionType, ROLE_BEHAVIORS } from "./harmonic-roles.js";
+import { generateNextChord } from "./harmonic-chord-evolution.js";
 
 const noteNames = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 const COLOR_INTERVALS = [3, 4, 7, 9];
@@ -171,6 +172,12 @@ export function evaluateHarmonicState(state) {
 
 function chooseRootCandidate(voices, previousState, targetRootPc, settings, profile, random) {
   const previousRootPc = previousState.rootCandidate;
+  const history = Array.isArray(settings.history) ? settings.history : [];
+  const recentRoots = history.map((state) => state.rootCandidate).filter((value) => Number.isFinite(value));
+  const repeatedRootCount = recentRoots.filter((root) => root === previousRootPc).length;
+  const recentTensionAverage = history.length
+    ? history.reduce((sum, state) => sum + (Number(state.tensionScore) || 0), 0) / history.length
+    : 0;
   const candidates = [...new Set(voices.map((voice) => voice.pc))];
 
   const scored = candidates.map((candidate) => {
@@ -180,7 +187,16 @@ function chooseRootCandidate(voices, previousState, targetRootPc, settings, prof
       : Math.min(normalizePc(candidate - targetRootPc), normalizePc(targetRootPc - candidate));
     const anchorWeight = voices.some((voice) => voice.pc === candidate && voice.role === "anchor") ? 0.4 : 0;
     const lowVoiceWeight = voices[0]?.pc === candidate ? 0.3 : 0;
-    const score = anchorWeight + lowVoiceWeight - closenessToPrevious * profile.preserveCenter * (0.12 + settings.harmonyLock * 0.2) - closenessToTarget * profile.rootPull * 0.08 + random() * 0.05;
+    const repetitionPenalty = candidate === previousRootPc ? repeatedRootCount * (1 - profile.preserveCenter) * 0.08 : 0;
+    const recoveryBonus = recentTensionAverage > 0.58 && candidate !== previousRootPc ? 0.12 : 0;
+    const score =
+      anchorWeight +
+      lowVoiceWeight +
+      recoveryBonus -
+      repetitionPenalty -
+      closenessToPrevious * profile.preserveCenter * (0.12 + settings.harmonyLock * 0.2) -
+      closenessToTarget * profile.rootPull * 0.08 +
+      random() * 0.05;
     return { candidate, score };
   });
 
@@ -320,56 +336,44 @@ export function evolveHarmonicState(previousState, options = {}) {
   }
 
   const settings = options.settings || {};
+  const history = Array.isArray(options.history) ? options.history : [];
   const profile = HARMONIC_MOTION_PROFILES[settings.harmonicMotion || "subtle"] || HARMONIC_MOTION_PROFILES.subtle;
-  const voices = previousState.voices.map((voice) => ({ ...voice }));
-  const voiceCount = voices.length;
-  const maxChangingVoices = Math.max(1, Math.min(voiceCount - 1 || 1, profile.maxChangingVoices));
-  const targetChangeProbability = lerp(profile.changeProbability * 0.55, profile.changeProbability, 1 - (settings.harmonyLock || 0));
-  const changeCandidates = voices.map((voice) => ({
-    voice,
-    score: random() * targetChangeProbability * (voice.role === "anchor" ? 0.45 : voice.role === "tension" ? 1.15 : 0.8),
-  }));
-
-  changeCandidates.sort((left, right) => right.score - left.score);
-  const changingVoiceIds = new Set(changeCandidates.slice(0, maxChangingVoices).filter((entry) => entry.score > targetChangeProbability * 0.25).map((entry) => entry.voice.voiceId));
-
-  if (changingVoiceIds.size === 0 && voiceCount) {
-    const firstNonAnchor = voices.find((voice) => voice.role !== "anchor") || voices[voices.length - 1];
-    changingVoiceIds.add(firstNonAnchor.voiceId);
-  }
-
-  const movedVoices = [];
+  const chordState = {
+    notes: previousState.voices.map((voice) => ({
+      pitchClass: voice.pc,
+      midi: voice.midi,
+      voiceId: voice.voiceId,
+      role: voice.role,
+    })),
+  };
+  const nextChord = generateNextChord(chordState, {
+    random,
+    settings,
+    history,
+    targetRootPc: options.targetRootPc,
+  });
+  const previousByVoiceId = new Map(previousState.voices.map((voice) => [voice.voiceId, voice]));
   let leapCount = 0;
+  const movedVoices = [];
 
-  const transformed = voices.map((voice) => {
-    const shouldMove = changingVoiceIds.has(voice.voiceId);
-    const motionEntries = movementEntriesForVoice(voice.role, settings, profile);
-    const motionType = shouldMove ? (weightedChoice(motionEntries, random) || pickMotionType(voice.role, random)) : "stay";
-    const delta = shouldMove ? chooseSemitoneDelta(motionType, voice.role, settings, random) : 0;
-    const moved = {
-      ...voice,
-      midi: voice.midi + delta,
-      pc: normalizePc(voice.midi + delta),
+  const transformed = nextChord.notes.map((note) => {
+    const previous = previousByVoiceId.get(note.voiceId) || previousState.voices[0];
+    const delta = note.midi - previous.midi;
+    const motionType = delta === 0 ? "stay" : Math.abs(delta) <= 2 ? "step" : "leap";
+    if (Math.abs(delta) >= 3) leapCount += 1;
+    if (delta !== 0) movedVoices.push(note.voiceId);
+
+    return {
+      ...previous,
+      midi: note.midi,
+      pc: normalizePc(note.midi),
       changed: delta !== 0,
       motionType,
     };
-
-    if (Math.abs(delta) >= 3) leapCount += 1;
-    if (delta !== 0) movedVoices.push(moved.voiceId);
-    return moved;
   });
 
-  if (leapCount > Math.max(1, Math.floor(voiceCount / 2))) {
-    transformed.forEach((voice) => {
-      if (voice.motionType === "leap") {
-        voice.midi = octaveNear(voice.midi, previousState.voices.find((candidate) => candidate.voiceId === voice.voiceId)?.midi ?? voice.midi);
-        voice.motionType = "step";
-      }
-    });
-  }
-
   const ordered = enforceVoiceOrder(transformed, previousState);
-  const rootCandidate = chooseRootCandidate(ordered, previousState, options.targetRootPc, settings, profile, random);
+  const rootCandidate = chooseRootCandidate(ordered, previousState, options.targetRootPc, { ...settings, history }, profile, random);
   const stabilized = stabilizeState(ordered, rootCandidate, previousState, settings);
 
   return evaluateHarmonicState({
@@ -382,28 +386,41 @@ export function evolveHarmonicState(previousState, options = {}) {
 }
 
 export function buildInfiniteSections(seedSections, settings, seed, makeRandom) {
+  return buildInfiniteSectionSequence(seedSections, settings, seed, seedSections.length, makeRandom);
+}
+
+export function buildInfiniteSectionSequence(seedSections, settings, seed, totalSectionCount, makeRandom) {
   if (!Array.isArray(seedSections) || seedSections.length === 0) return [];
 
   const random = makeRandom(seed + 9173);
   const generated = [];
+  const history = [];
+  const templateLoopBeats = seedSections.reduce((max, section) => Math.max(max, section.startBeat + section.durationBeats), 0);
   let currentState = createHarmonicStateFromSection(seedSections[0]);
 
-  generated.push(stateToSection(currentState, seedSections[0], 0));
+  generated.push(stateToSection(currentState, seedSections[0], 0, templateLoopBeats, seedSections.length));
+  history.push(currentState);
 
-  for (let index = 1; index < seedSections.length; index += 1) {
-    const skeleton = seedSections[index];
+  for (let index = 1; index < totalSectionCount; index += 1) {
+    const skeleton = seedSections[index % seedSections.length];
+    const targetRootPc = index < seedSections.length ? skeleton.rootPc : null;
     currentState = evolveHarmonicState(currentState, {
       random,
       settings,
-      targetRootPc: skeleton.rootPc,
+      targetRootPc,
+      history,
     });
-    generated.push(stateToSection(currentState, skeleton, index));
+    generated.push(stateToSection(currentState, skeleton, index, templateLoopBeats, seedSections.length));
+    history.push(currentState);
+    if (history.length > 8) history.shift();
   }
 
   return generated;
 }
 
-function stateToSection(state, skeleton, index) {
+function stateToSection(state, skeleton, index, templateLoopBeats = 0, templateSectionCount = 1) {
+  const cycle = Math.floor(index / templateSectionCount);
+  const startBeat = skeleton.startBeat + cycle * templateLoopBeats;
   return {
     ...skeleton,
     label: state.label,
@@ -427,6 +444,7 @@ function stateToSection(state, skeleton, index) {
       name: voice.noteName,
       voiceId: voice.voiceId,
     })),
+    startBeat,
     state: {
       rootCandidate: state.rootCandidate,
       stabilityScore: state.stabilityScore,

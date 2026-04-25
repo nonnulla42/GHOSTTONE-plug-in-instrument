@@ -4,6 +4,7 @@ import test from "node:test";
 import { parseChord } from "../src/core/ghosttone-core.js";
 import {
   buildInfiniteSections,
+  buildInfiniteSectionSequence,
   createHarmonicStateFromSection,
   evolveHarmonicState,
 } from "../src/core/harmonic-infinite.js";
@@ -115,4 +116,27 @@ test("buildInfiniteSections creates a finite evolving window from a seed progres
   assert.equal(sections.length, skeleton.length);
   assert.ok(sections.every((section) => section.notes.some((note) => note.harmonicRole === "anchor")));
   assert.ok(sections.slice(1).some((section) => section.label.includes("infinite")));
+});
+
+test("longer infinite evolution keeps the register from drifting upward", () => {
+  const skeleton = [
+    seedSection("Am9", 0, 4),
+    seedSection("Fmaj7", 4, 4),
+    seedSection("Cadd9", 8, 4),
+    seedSection("Gsus4", 12, 4),
+  ];
+  const sections = buildInfiniteSectionSequence(skeleton, {
+    harmonicMotion: "evolving",
+    harmonyLock: 0.42,
+    stayMusical: true,
+  }, 707, 32, makeRandom);
+  const centers = sections.map((section) => {
+    const sum = section.notes.reduce((total, note) => total + note.midi, 0);
+    return sum / section.notes.length;
+  });
+  const initialCenter = centers[0];
+  const finalCenter = centers[centers.length - 1];
+
+  assert.ok(Math.max(...centers) <= 72);
+  assert.ok(finalCenter - initialCenter < 10);
 });

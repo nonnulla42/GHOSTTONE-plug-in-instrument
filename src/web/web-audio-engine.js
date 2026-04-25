@@ -1,25 +1,30 @@
 import { scheduleEventsForBlock, samplesToBeats } from "../adapters/host-time-adapter.js";
 import { buildSynthVoicePlan, createWebAudioSynthVoice } from "../audio/synth-voice.js";
 import { VoiceManager } from "../audio/voice-manager.js";
+import { createInfiniteStreamRuntime, ensureInfiniteBeats } from "../core/infinite-stream-runtime.js";
 
-export function getBrowserScheduleBlock({ audioCurrentTime, loopStartTime, bpm, sampleRate, loopBeats, lookaheadSeconds }) {
+export function getBrowserScheduleBlock({ audioCurrentTime, loopStartTime, bpm, sampleRate, loopBeats, lookaheadSeconds, isLooping = true }) {
   const elapsedSeconds = Math.max(0, audioCurrentTime - loopStartTime);
   const absoluteStartBeat = elapsedSeconds / (60 / bpm);
   const blockSize = Math.max(1, Math.round(lookaheadSeconds * sampleRate));
-
-  return {
+  const block = {
     bpm,
     sampleRate,
     blockSize,
     blockStartBeat: absoluteStartBeat,
-    isLooping: true,
-    loopStartBeat: 0,
-    loopEndBeat: loopBeats,
   };
+
+  if (isLooping) {
+    block.isLooping = true;
+    block.loopStartBeat = 0;
+    block.loopEndBeat = loopBeats;
+  }
+
+  return block;
 }
 
-export function getNextBrowserScheduleBlock({ audioCurrentTime, loopStartTime, bpm, sampleRate, loopBeats, lookaheadSeconds, lastScheduledBeat }) {
-  const currentBlock = getBrowserScheduleBlock({ audioCurrentTime, loopStartTime, bpm, sampleRate, loopBeats, lookaheadSeconds });
+export function getNextBrowserScheduleBlock({ audioCurrentTime, loopStartTime, bpm, sampleRate, loopBeats, lookaheadSeconds, lastScheduledBeat, isLooping = true }) {
+  const currentBlock = getBrowserScheduleBlock({ audioCurrentTime, loopStartTime, bpm, sampleRate, loopBeats, lookaheadSeconds, isLooping });
   const currentEndBeat = currentBlock.blockStartBeat + samplesToBeats(currentBlock.blockSize, bpm, sampleRate);
   const blockStartBeat = Math.max(currentBlock.blockStartBeat, Number.isFinite(lastScheduledBeat) ? lastScheduledBeat : currentBlock.blockStartBeat);
   const durationBeats = Math.max(0, currentEndBeat - blockStartBeat);
@@ -47,6 +52,8 @@ export class WebAudioEngine {
     this.lastScheduledBeat = null;
     this.voiceManager = new VoiceManager({ maxVoices: 48 });
     this.activeVoiceCount = 0;
+    this.streamRuntime = null;
+    this.onPatternExtended = null;
   }
 
   setup() {
@@ -76,6 +83,13 @@ export class WebAudioEngine {
     this.isPlaying = true;
     this.loopStartTime = ctx.currentTime + 0.05;
     this.lastScheduledBeat = null;
+    const previousLoopBeats = pattern.loopBeats;
+    this.streamRuntime = pattern.generatorMode === "infinite"
+      ? createInfiniteStreamRuntime(pattern, coreSettings, pattern.seed || 1)
+      : null;
+    if (this.streamRuntime && pattern.loopBeats !== previousLoopBeats) {
+      this.onPatternExtended?.(pattern);
+    }
     this.voiceManager.clear();
     this.tick(pattern, coreSettings, soundSettings, bpm);
   }
@@ -86,6 +100,7 @@ export class WebAudioEngine {
     this.timer = null;
     this.activeVoiceCount = 0;
     this.voiceManager.clear();
+    this.streamRuntime = null;
     this.audio?.ctx.close();
     this.audio = null;
   }
@@ -101,16 +116,21 @@ export class WebAudioEngine {
 
     const { ctx } = this.setup();
     this.voiceManager.advanceTo(ctx.currentTime);
+    const isInfinite = Boolean(this.streamRuntime);
+    const livePattern = this.getPlaybackPattern(pattern);
+    const currentBeat = this.getCurrentBeat(bpm, livePattern);
+    this.extendInfinitePlaybackIfNeeded(currentBeat || 0);
     const blockContext = getNextBrowserScheduleBlock({
       audioCurrentTime: ctx.currentTime,
       loopStartTime: this.loopStartTime,
       bpm,
       sampleRate: ctx.sampleRate,
-      loopBeats: pattern.loopBeats,
+      loopBeats: livePattern.loopBeats,
       lookaheadSeconds: this.lookaheadSeconds,
       lastScheduledBeat: this.lastScheduledBeat,
+      isLooping: !isInfinite,
     });
-    const scheduled = scheduleEventsForBlock(pattern.events, blockContext);
+    const scheduled = scheduleEventsForBlock(livePattern.events, blockContext);
 
     scheduled.forEach((event) => {
       const when = ctx.currentTime + event.sampleOffset / ctx.sampleRate;
@@ -122,6 +142,32 @@ export class WebAudioEngine {
     this.lastScheduledBeat = blockContext.blockStartBeat + samplesToBeats(blockContext.blockSize, bpm, ctx.sampleRate);
     clearTimeout(this.timer);
     this.timer = setTimeout(() => this.tick(pattern, coreSettings, soundSettings, bpm), this.tickMs);
+  }
+
+  getPlaybackPattern(pattern) {
+    return this.streamRuntime?.pattern || pattern;
+  }
+
+  extendInfinitePlaybackIfNeeded(currentBeat) {
+    if (!this.streamRuntime) return;
+
+    const previousLoopBeats = this.streamRuntime.pattern.loopBeats;
+    ensureInfiniteBeats(this.streamRuntime, currentBeat);
+    if (this.streamRuntime.pattern.loopBeats !== previousLoopBeats) {
+      this.onPatternExtended?.(this.streamRuntime.pattern);
+    }
+  }
+
+  getInfiniteDebugState() {
+    if (!this.streamRuntime) return null;
+
+    return {
+      generatedBars: this.streamRuntime.generatedBars,
+      generatedEvents: this.streamRuntime.generatedEvents,
+      nextBarToGenerate: this.streamRuntime.nextBarToGenerate,
+      availableBeatRange: [0, this.streamRuntime.pattern.loopBeats],
+      lastScheduledBeat: this.lastScheduledBeat,
+    };
   }
 
   playVoice(event, when, durationSeconds, coreSettings, soundSettings) {
@@ -150,12 +196,18 @@ export class WebAudioEngine {
     });
   }
 
-  getCurrentBeat(bpm, loopBeats) {
+  getCurrentBeat(bpm, patternOrLoopBeats) {
     if (!this.isPlaying || !this.audio) return null;
 
+    const isInfinite = typeof patternOrLoopBeats === "object" && patternOrLoopBeats?.generatorMode === "infinite";
+    const loopBeats = typeof patternOrLoopBeats === "object" ? patternOrLoopBeats.loopBeats : patternOrLoopBeats;
     const secondsPerBeat = 60 / bpm;
+    const elapsedSeconds = Math.max(0, this.audio.ctx.currentTime - this.loopStartTime);
+    if (isInfinite) {
+      return elapsedSeconds / secondsPerBeat;
+    }
     const loopSeconds = loopBeats * secondsPerBeat;
-    const elapsed = (this.audio.ctx.currentTime - this.loopStartTime) % loopSeconds;
+    const elapsed = elapsedSeconds % loopSeconds;
     return elapsed / secondsPerBeat;
   }
 }
