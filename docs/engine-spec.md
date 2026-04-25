@@ -202,3 +202,23 @@ The manager is responsible for:
 - basic voice stealing when `maxVoices` is reached
 
 The Web Audio engine uses this manager while still producing sound with browser oscillators. A future plugin synth can reuse the same lifecycle rules with native DSP voices.
+
+## Synth Voice
+
+`src/audio/synth-voice.js` owns the sound plan for a single voice.
+
+It is split into:
+
+- pure planning helpers for pitch, drift, envelope, filter, and pan
+- Web Audio node creation for the current browser body
+
+A synth voice applies:
+
+- base pitch from `midi`
+- microtonal start offset from `cents`
+- drift target from `driftEnd`
+- amplitude attack and release
+- moderate pan from `voiceId`
+- simple waveform and lowpass filter settings
+
+This keeps `web-audio-engine.js` focused on scheduling and coordination. The browser implementation is still temporary, but the voice contract is now explicit enough to port to native DSP later.
