@@ -109,6 +109,73 @@ h2 {
   background: rgba(0, 0, 0, 0.16);
 }
 
+.preset-control,
+.seed-readout,
+.compare-group {
+  min-height: 46px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.preset-control {
+  display: grid;
+  grid-template-columns: auto minmax(130px, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+}
+
+.preset-control span,
+.seed-readout span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.preset-control select {
+  min-height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0 8px;
+  color: var(--text);
+  background: var(--panel-soft);
+  font-weight: 800;
+}
+
+.compare-group {
+  display: grid;
+  grid-template-columns: repeat(2, 40px);
+  gap: 4px;
+  padding: 4px;
+}
+
+.compare-button {
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  font-weight: 900;
+}
+
+.compare-button.active {
+  color: #10211d;
+  background: var(--accent-strong);
+}
+
+.seed-readout {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+}
+
+.seed-readout strong {
+  color: var(--accent-strong);
+  font-size: 0.86rem;
+}
+
 .bpm-control span {
   color: var(--muted);
   font-size: 0.78rem;

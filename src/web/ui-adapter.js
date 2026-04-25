@@ -3,6 +3,9 @@ export function getElements(root = document) {
     playButton: root.querySelector("#playButton"),
     generateButton: root.querySelector("#generateButton"),
     exportButton: root.querySelector("#exportButton"),
+    presetSelect: root.querySelector("#presetSelect"),
+    compareButtons: [...root.querySelectorAll(".compare-button")],
+    seedValue: root.querySelector("#seedValue"),
     bpm: root.querySelector("#bpm"),
     chordInputs: [...root.querySelectorAll(".chord-input")],
     splitButtons: [...root.querySelectorAll(".split-button")],
@@ -178,9 +181,9 @@ export function updateReadouts(els, pattern, settings, bpm, soundSettings, curre
   els.eventReadout.textContent = String(pattern.events.length);
   els.currentChord.textContent = pattern.sections[currentSectionIndex]?.label || "-";
   els.patternTitle.textContent = `${capitalize(settings.colorMode)} ${settings.mode} at ${bpm} BPM`;
+  if (els.seedValue) els.seedValue.textContent = String(pattern.seed);
 }
 
 function capitalize(value) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
-

@@ -222,3 +222,29 @@ A synth voice applies:
 - simple waveform and lowpass filter settings
 
 This keeps `web-audio-engine.js` focused on scheduling and coordination. The browser implementation is still temporary, but the voice contract is now explicit enough to port to native DSP later.
+
+## Web Wrapper
+
+The browser app is now a development wrapper around the engine pipeline.
+
+Its responsibilities are limited to:
+
+- reading UI controls into settings/progression/seed
+- applying presets and compare patches
+- calling `ghosttone-core`
+- passing events to visual, MIDI, and audio adapters
+
+Preset and compare behavior lives outside `app.js`:
+
+- `src/web/presets.js`: four minimal identity presets
+- `src/web/patch-adapter.js`: capture/apply browser patches
+- `src/web/compare-manager.js`: deterministic A/B slot state
+
+The current minimal presets are:
+
+- Dreamy Pad
+- Warm Bed
+- Dark Drift
+- Broken Arp
+
+These presets are not a sound-library layer. They are compact test fixtures for the musical engine and early product identity.

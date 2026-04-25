@@ -14,6 +14,23 @@
           <h1>GhostTone</h1>
         </div>
         <div class="transport">
+          <label class="preset-control">
+            <span>Preset</span>
+            <select id="presetSelect">
+              <option value="dreamy-pad">Dreamy Pad</option>
+              <option value="warm-bed">Warm Bed</option>
+              <option value="dark-drift">Dark Drift</option>
+              <option value="broken-arp">Broken Arp</option>
+            </select>
+          </label>
+          <div class="compare-group" role="group" aria-label="Compare slots">
+            <button class="compare-button active" data-compare-slot="A" type="button">A</button>
+            <button class="compare-button" data-compare-slot="B" type="button">B</button>
+          </div>
+          <div class="seed-readout">
+            <span>Seed</span>
+            <strong id="seedValue">0</strong>
+          </div>
           <label class="bpm-control">
             <span>BPM</span>
             <input id="bpm" type="number" min="40" max="180" value="92" />

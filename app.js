@@ -1,6 +1,9 @@
 import { generatePattern } from "./src/core/ghosttone-core.js";
 import { WebAudioAdapter } from "./src/web/audio-adapter.js";
+import { CompareManager } from "./src/web/compare-manager.js";
 import { exportMidi } from "./src/web/midi-export-adapter.js";
+import { applyPatch, capturePatch, presetToPatch, updateCompareUi } from "./src/web/patch-adapter.js";
+import { findPreset } from "./src/web/presets.js";
 import {
   applySoundPreset,
   createInitialBarStates,
@@ -26,6 +29,7 @@ const state = {
 
 const els = getElements();
 const audio = new WebAudioAdapter();
+const compare = new CompareManager();
 const visualizer = new GridVisualizer(els.gridView);
 
 function currentCoreSettings() {
@@ -51,6 +55,32 @@ function rebuildPattern({ restartAudio = true } = {}) {
   if (restartAudio) {
     audio.restart(state.pattern, coreSettings, soundSettings, bpm);
   }
+}
+
+function saveActivePatch() {
+  compare.saveActive(capturePatch(els, state, `Slot ${compare.getActiveSlot()}`));
+}
+
+function loadPatch(patch, { restartAudio = true } = {}) {
+  applyPatch(els, state, patch);
+  refreshProgressionUi(state.barStates);
+  rebuildPattern({ restartAudio });
+}
+
+function applyPreset(presetId) {
+  loadPatch(presetToPatch(findPreset(presetId)));
+  saveActivePatch();
+}
+
+function switchCompareSlot(slot) {
+  const patch = compare.switchTo(slot, capturePatch(els, state, `Slot ${compare.getActiveSlot()}`), (nextSlot, current) => ({
+    ...current,
+      seed: Math.floor(Math.random() * 100000),
+      name: `Slot ${nextSlot}`,
+    }));
+
+  loadPatch(patch);
+  updateCompareUi(document, slot);
 }
 
 function refreshSoundOnly({ restartAudio = true } = {}) {
@@ -106,30 +136,35 @@ function setMode(mode) {
   });
   refreshProgressionUi(state.barStates);
   rebuildPattern();
+  saveActivePatch();
 }
 
 function setSound(sound) {
   state.sound = sound;
   applySoundPreset(els, sound);
   refreshSoundOnly();
+  saveActivePatch();
 }
 
 function toggleSplit(barIndex) {
   state.barStates[barIndex].split = !state.barStates[barIndex].split;
   refreshProgressionUi(state.barStates);
   rebuildPattern();
+  saveActivePatch();
 }
 
 function randomizeVoicing(barIndex, slotIndex) {
   state.barStates[barIndex].slots[slotIndex].voicingSeed = Math.floor(Math.random() * 100000) + 1;
   refreshProgressionUi(state.barStates);
   rebuildPattern();
+  saveActivePatch();
 }
 
 function randomizeArp(barIndex, slotIndex) {
   state.barStates[barIndex].slots[slotIndex].arpSeed = Math.floor(Math.random() * 100000) + 1;
   refreshProgressionUi(state.barStates);
   rebuildPattern();
+  saveActivePatch();
 }
 
 function bindEvents() {
@@ -140,6 +175,15 @@ function bindEvents() {
   els.generateButton.addEventListener("click", () => {
     state.seed = Math.floor(Math.random() * 100000);
     rebuildPattern();
+    saveActivePatch();
+  });
+
+  els.presetSelect.addEventListener("change", () => {
+    applyPreset(els.presetSelect.value);
+  });
+
+  els.compareButtons.forEach((button) => {
+    button.addEventListener("click", () => switchCompareSlot(button.dataset.compareSlot));
   });
 
   els.exportButton.addEventListener("click", () => {
@@ -149,10 +193,12 @@ function bindEvents() {
 
   els.bpm.addEventListener("input", () => {
     refreshSoundOnly();
+    saveActivePatch();
   });
   els.bpm.addEventListener("change", () => {
     els.bpm.value = readBpm(els);
     refreshSoundOnly();
+    saveActivePatch();
   });
 
   document.querySelectorAll(".segment").forEach((button) => {
@@ -189,11 +235,17 @@ function bindEvents() {
     els.arpContinuity,
     ...els.chordInputs,
   ].forEach((control) => {
-    control.addEventListener("input", () => rebuildPattern());
+    control.addEventListener("input", () => {
+      rebuildPattern();
+      saveActivePatch();
+    });
   });
 
   [els.waveform, els.cutoff, els.attack, els.release, els.space].forEach((control) => {
-    control.addEventListener("input", () => refreshSoundOnly());
+    control.addEventListener("input", () => {
+      refreshSoundOnly();
+      saveActivePatch();
+    });
   });
 
   window.addEventListener("resize", () => {
@@ -202,6 +254,10 @@ function bindEvents() {
 }
 
 bindEvents();
-refreshProgressionUi(state.barStates);
-rebuildPattern({ restartAudio: false });
-
+loadPatch(presetToPatch(findPreset(els.presetSelect.value)), { restartAudio: false });
+saveActivePatch();
+compare.setSlot("B", {
+  ...capturePatch(els, state, "Slot B"),
+  seed: Math.floor(Math.random() * 100000),
+});
+updateCompareUi(document, compare.getActiveSlot());
