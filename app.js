@@ -1,103 +1,132 @@
 import { generatePattern } from "./src/core/ghosttone-core.js";
-import { WebAudioAdapter } from "./src/web/audio-adapter.js";
-import { CompareManager } from "./src/web/compare-manager.js";
-import { exportMidi } from "./src/web/midi-export-adapter.js";
-import { applyPatch, capturePatch, presetToPatch, updateCompareUi } from "./src/web/patch-adapter.js";
-import { findPreset } from "./src/web/presets.js";
 import {
-  applySoundPreset,
-  createInitialBarStates,
-  getElements,
-  readBpm,
-  readCoreSettings,
-  readProgression,
-  readSoundSettings,
-  refreshProgressionUi,
-  updateReadouts,
-} from "./src/web/ui-adapter.js";
+  applyPresetToPatchState,
+  createPatchFromPreset,
+  createPatchState,
+  deserializePatchState,
+  getActivePatch,
+  patchToCoreSettings,
+  patchToProgression,
+  patchToSoundSettings,
+  serializePatchState,
+  setActiveCompareSlot,
+  setActivePatch,
+  setPatchSlot,
+} from "./src/state/patch-state.js";
+import { WebAudioAdapter } from "./src/web/audio-adapter.js";
+import { exportMidi } from "./src/web/midi-export-adapter.js";
+import { applyPatch, capturePatch, updateCompareUi } from "./src/web/patch-adapter.js";
+import { findPreset } from "./src/web/presets.js";
+import { getElements, refreshProgressionUi, updateReadouts } from "./src/web/ui-adapter.js";
 import { GridVisualizer } from "./src/web/visual-adapter.js";
 
+const initialPreset = findPreset("dreamy-pad");
+
 const state = {
-  mode: "pad",
-  sound: "pad",
-  seed: Math.floor(Math.random() * 100000),
+  patchState: createPatchState({
+    slots: {
+      A: createPatchFromPreset(initialPreset),
+      B: { ...createPatchFromPreset(initialPreset), name: "Slot B", seed: Math.floor(Math.random() * 100000) + 1 },
+    },
+  }),
   pattern: null,
-  barStates: createInitialBarStates(4),
   currentSectionIndex: 0,
   raf: null,
 };
 
 const els = getElements();
 const audio = new WebAudioAdapter();
-const compare = new CompareManager();
 const visualizer = new GridVisualizer(els.gridView);
 
-function currentCoreSettings() {
-  return readCoreSettings(els, state.mode);
+function activePatch() {
+  return getActivePatch(state.patchState);
 }
 
-function currentSoundSettings() {
-  return readSoundSettings(els, state.sound);
+function syncActivePatchFromUi() {
+  state.patchState = setActivePatch(state.patchState, capturePatch(els, activePatch()));
+}
+
+function applyActivePatchToUi() {
+  const patch = activePatch();
+  applyPatch(els, patch);
+  refreshProgressionUi(patch.barStates);
+  updateCompareUi(document, state.patchState.activeCompareSlot);
 }
 
 function rebuildPattern({ restartAudio = true } = {}) {
-  const coreSettings = currentCoreSettings();
-  const progression = readProgression(els, state.barStates);
-  const bpm = readBpm(els);
-  const soundSettings = currentSoundSettings();
+  const patch = activePatch();
+  const coreSettings = patchToCoreSettings(patch);
+  const progression = patchToProgression(patch);
+  const soundSettings = patchToSoundSettings(patch);
 
-  state.pattern = generatePattern(coreSettings, progression, state.seed);
+  state.pattern = generatePattern(coreSettings, progression, patch.seed);
   if (state.currentSectionIndex >= state.pattern.sections.length) state.currentSectionIndex = 0;
 
-  updateReadouts(els, state.pattern, coreSettings, bpm, soundSettings, state.currentSectionIndex);
+  updateReadouts(els, state.pattern, coreSettings, patch.bpm, soundSettings, state.currentSectionIndex);
   visualizer.render(state.pattern, state.currentSectionIndex);
 
   if (restartAudio) {
-    audio.restart(state.pattern, coreSettings, soundSettings, bpm);
+    audio.restart(state.pattern, coreSettings, soundSettings, patch.bpm);
   }
 }
 
-function saveActivePatch() {
-  compare.saveActive(capturePatch(els, state, `Slot ${compare.getActiveSlot()}`));
+function refreshSoundOnly({ restartAudio = true } = {}) {
+  const patch = activePatch();
+  const coreSettings = patchToCoreSettings(patch);
+  const soundSettings = patchToSoundSettings(patch);
+
+  updateReadouts(els, state.pattern, coreSettings, patch.bpm, soundSettings, state.currentSectionIndex);
+  if (restartAudio) {
+    audio.restart(state.pattern, coreSettings, soundSettings, patch.bpm);
+  }
 }
 
-function loadPatch(patch, { restartAudio = true } = {}) {
-  applyPatch(els, state, patch);
-  refreshProgressionUi(state.barStates);
+function loadCurrentPatch({ restartAudio = true } = {}) {
+  applyActivePatchToUi();
   rebuildPattern({ restartAudio });
 }
 
 function applyPreset(presetId) {
-  loadPatch(presetToPatch(findPreset(presetId)));
-  saveActivePatch();
+  state.patchState = applyPresetToPatchState(state.patchState, findPreset(presetId));
+  loadCurrentPatch();
 }
 
 function switchCompareSlot(slot) {
-  const patch = compare.switchTo(slot, capturePatch(els, state, `Slot ${compare.getActiveSlot()}`), (nextSlot, current) => ({
-    ...current,
-      seed: Math.floor(Math.random() * 100000),
-      name: `Slot ${nextSlot}`,
-    }));
+  syncActivePatchFromUi();
 
-  loadPatch(patch);
-  updateCompareUi(document, slot);
+  if (!state.patchState.slots[slot]) {
+    state.patchState = setPatchSlot(state.patchState, slot, {
+      ...activePatch(),
+      name: `Slot ${slot}`,
+      seed: Math.floor(Math.random() * 100000) + 1,
+    });
+  }
+
+  state.patchState = setActiveCompareSlot(state.patchState, slot);
+  loadCurrentPatch();
 }
 
-function refreshSoundOnly({ restartAudio = true } = {}) {
-  const coreSettings = currentCoreSettings();
-  const bpm = readBpm(els);
-  const soundSettings = currentSoundSettings();
+function updateActivePatch(mutator, { restartAudio = true, syncUi = true } = {}) {
+  const nextPatch = mutator(activePatch());
+  state.patchState = setActivePatch(state.patchState, nextPatch);
+  if (syncUi) applyActivePatchToUi();
+  rebuildPattern({ restartAudio });
+}
 
-  updateReadouts(els, state.pattern, coreSettings, bpm, soundSettings, state.currentSectionIndex);
-  if (restartAudio) {
-    audio.restart(state.pattern, coreSettings, soundSettings, bpm);
+function updateActivePatchFromUi({ restartAudio = true, soundOnly = false } = {}) {
+  syncActivePatchFromUi();
+  if (soundOnly) {
+    refreshSoundOnly({ restartAudio });
+  } else {
+    rebuildPattern({ restartAudio });
   }
 }
 
 async function togglePlay() {
   if (!audio.isPlaying) {
-    rebuildPattern({ restartAudio: false });
-    await audio.start(state.pattern, currentCoreSettings(), currentSoundSettings(), readBpm(els));
+    updateActivePatchFromUi({ restartAudio: false });
+    const patch = activePatch();
+    await audio.start(state.pattern, patchToCoreSettings(patch), patchToSoundSettings(patch), patch.bpm);
     els.playButton.textContent = "Stop";
     animate();
     return;
@@ -110,8 +139,8 @@ async function togglePlay() {
 }
 
 function animate() {
-  const bpm = readBpm(els);
-  const beat = audio.getCurrentBeat(bpm, state.pattern.loopBeats);
+  const patch = activePatch();
+  const beat = audio.getCurrentBeat(patch.bpm, state.pattern.loopBeats);
   visualizer.updatePlayhead(beat);
 
   if (beat !== null) {
@@ -130,41 +159,80 @@ function animate() {
 }
 
 function setMode(mode) {
-  state.mode = mode;
-  document.querySelectorAll(".segment").forEach((button) => {
-    button.classList.toggle("active", button.dataset.mode === mode);
-  });
-  refreshProgressionUi(state.barStates);
-  rebuildPattern();
-  saveActivePatch();
+  updateActivePatch((patch) => ({ ...patch, mode }));
 }
 
 function setSound(sound) {
-  state.sound = sound;
-  applySoundPreset(els, sound);
-  refreshSoundOnly();
-  saveActivePatch();
+  updateActivePatch((patch) => ({ ...patch, sound }), { restartAudio: true });
 }
 
 function toggleSplit(barIndex) {
-  state.barStates[barIndex].split = !state.barStates[barIndex].split;
-  refreshProgressionUi(state.barStates);
-  rebuildPattern();
-  saveActivePatch();
+  updateActivePatch((patch) => ({
+    ...patch,
+    barStates: patch.barStates.map((bar, index) => (index === barIndex ? { ...bar, split: !bar.split } : bar)),
+  }));
 }
 
 function randomizeVoicing(barIndex, slotIndex) {
-  state.barStates[barIndex].slots[slotIndex].voicingSeed = Math.floor(Math.random() * 100000) + 1;
-  refreshProgressionUi(state.barStates);
-  rebuildPattern();
-  saveActivePatch();
+  updateActivePatch((patch) => ({
+    ...patch,
+    barStates: updateSlotSeed(patch.barStates, barIndex, slotIndex, "voicingSeed"),
+  }));
 }
 
 function randomizeArp(barIndex, slotIndex) {
-  state.barStates[barIndex].slots[slotIndex].arpSeed = Math.floor(Math.random() * 100000) + 1;
-  refreshProgressionUi(state.barStates);
-  rebuildPattern();
-  saveActivePatch();
+  updateActivePatch((patch) => ({
+    ...patch,
+    barStates: updateSlotSeed(patch.barStates, barIndex, slotIndex, "arpSeed"),
+  }));
+}
+
+function regenerateSeed() {
+  updateActivePatch((patch) => ({
+    ...patch,
+    seed: Math.floor(Math.random() * 100000) + 1,
+  }));
+}
+
+function exportPatchJson() {
+  syncActivePatchFromUi();
+  const blob = new Blob([serializePatchState(state.patchState)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "ghosttone-patch.json";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function importPatchJson(file) {
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.addEventListener("load", () => {
+    try {
+      state.patchState = deserializePatchState(String(reader.result));
+      loadCurrentPatch();
+    } catch (error) {
+      console.error(error);
+      window.alert("Could not import this GhostTone patch JSON.");
+    } finally {
+      els.importPatchFile.value = "";
+    }
+  });
+  reader.readAsText(file);
+}
+
+function updateSlotSeed(barStates, barIndex, slotIndex, seedKey) {
+  return barStates.map((bar, index) => {
+    if (index !== barIndex) return bar;
+    return {
+      ...bar,
+      slots: bar.slots.map((slot, innerIndex) => (innerIndex === slotIndex ? { ...slot, [seedKey]: Math.floor(Math.random() * 100000) + 1 } : slot)),
+    };
+  });
 }
 
 function bindEvents() {
@@ -172,34 +240,24 @@ function bindEvents() {
     togglePlay().catch((error) => console.error(error));
   });
 
-  els.generateButton.addEventListener("click", () => {
-    state.seed = Math.floor(Math.random() * 100000);
-    rebuildPattern();
-    saveActivePatch();
-  });
-
-  els.presetSelect.addEventListener("change", () => {
-    applyPreset(els.presetSelect.value);
-  });
+  els.generateButton.addEventListener("click", regenerateSeed);
+  els.presetSelect.addEventListener("change", () => applyPreset(els.presetSelect.value));
+  els.exportPatchButton.addEventListener("click", exportPatchJson);
+  els.importPatchButton.addEventListener("click", () => els.importPatchFile.click());
+  els.importPatchFile.addEventListener("change", () => importPatchJson(els.importPatchFile.files?.[0]));
 
   els.compareButtons.forEach((button) => {
     button.addEventListener("click", () => switchCompareSlot(button.dataset.compareSlot));
   });
 
   els.exportButton.addEventListener("click", () => {
-    rebuildPattern({ restartAudio: false });
-    exportMidi(state.pattern, readBpm(els), state.sound);
+    updateActivePatchFromUi({ restartAudio: false });
+    const patch = activePatch();
+    exportMidi(state.pattern, patch.bpm, patch.sound);
   });
 
-  els.bpm.addEventListener("input", () => {
-    refreshSoundOnly();
-    saveActivePatch();
-  });
-  els.bpm.addEventListener("change", () => {
-    els.bpm.value = readBpm(els);
-    refreshSoundOnly();
-    saveActivePatch();
-  });
+  els.bpm.addEventListener("input", () => updateActivePatchFromUi({ soundOnly: true }));
+  els.bpm.addEventListener("change", () => updateActivePatchFromUi({ soundOnly: true }));
 
   document.querySelectorAll(".segment").forEach((button) => {
     button.addEventListener("click", () => setMode(button.dataset.mode));
@@ -235,17 +293,11 @@ function bindEvents() {
     els.arpContinuity,
     ...els.chordInputs,
   ].forEach((control) => {
-    control.addEventListener("input", () => {
-      rebuildPattern();
-      saveActivePatch();
-    });
+    control.addEventListener("input", () => updateActivePatchFromUi());
   });
 
   [els.waveform, els.cutoff, els.attack, els.release, els.space].forEach((control) => {
-    control.addEventListener("input", () => {
-      refreshSoundOnly();
-      saveActivePatch();
-    });
+    control.addEventListener("input", () => updateActivePatchFromUi({ soundOnly: true }));
   });
 
   window.addEventListener("resize", () => {
@@ -254,10 +306,5 @@ function bindEvents() {
 }
 
 bindEvents();
-loadPatch(presetToPatch(findPreset(els.presetSelect.value)), { restartAudio: false });
-saveActivePatch();
-compare.setSlot("B", {
-  ...capturePatch(els, state, "Slot B"),
-  seed: Math.floor(Math.random() * 100000),
-});
-updateCompareUi(document, compare.getActiveSlot());
+loadCurrentPatch({ restartAudio: false });
+

@@ -34,3 +34,4 @@ See:
 
 - `docs/plugin-first-roadmap.md`
 - `docs/engine-spec.md`
+- `docs/plugin-body-spec.md`

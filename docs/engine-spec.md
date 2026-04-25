@@ -248,3 +248,33 @@ The current minimal presets are:
 - Broken Arp
 
 These presets are not a sound-library layer. They are compact test fixtures for the musical engine and early product identity.
+
+## Serializable State
+
+`src/state/patch-state.js` defines the plugin-facing patch state and is now the explicit source of truth for the browser wrapper.
+
+It owns:
+
+- schema version
+- default patch
+- compare slots
+- active compare slot
+- preset-to-patch conversion
+- serialize/deserialize
+- state normalization
+
+This state is the bridge from the browser test body to a future plugin body. A DAW project should eventually save this patch state, then restore it and regenerate the same musical events.
+
+The browser app follows this state path:
+
+```txt
+UI edit
+-> capture active patch
+-> patch-state active compare slot
+-> patchToCoreSettings / patchToProgression / patchToSoundSettings
+-> core / visual / MIDI / audio adapters
+```
+
+Patch JSON export/import serializes the full patch state, including compare slots.
+
+See `docs/plugin-body-spec.md` for the future processor/editor split.

@@ -1,16 +1,16 @@
+import { createPatchFromPreset, normalizePatch } from "../state/patch-state.js";
+
 const coreRangeControls = ["ghostAmount", "drift", "harmonyLock", "voicingVariation", "voicingContinuity", "arpDensity", "arpVariation", "arpContinuity"];
 const coreSelectControls = ["colorMode", "voicingStyle", "arpDirection", "arpFeel"];
 const coreToggleControls = ["stayMusical", "ghostEnabled"];
 const soundControls = ["waveform", "cutoff", "attack", "release", "space"];
 
-export function capturePatch(els, state, name = "Patch") {
-  return {
+export function capturePatch(els, basePatch, name = basePatch?.name || "Patch") {
+  return normalizePatch({
+    ...basePatch,
     name,
-    seed: state.seed,
     bpm: Number(els.bpm.value),
-    mode: state.mode,
-    sound: state.sound,
-    barStates: cloneBarStates(state.barStates),
+    barStates: cloneBarStates(basePatch.barStates),
     chords: els.chordInputs.map((input) => ({
       bar: Number(input.dataset.bar),
       slot: Number(input.dataset.slot),
@@ -18,35 +18,22 @@ export function capturePatch(els, state, name = "Patch") {
     })),
     core: readControlGroup(els, [...coreRangeControls, ...coreSelectControls, ...coreToggleControls]),
     soundControls: readControlGroup(els, soundControls),
-  };
+  });
 }
 
 export function presetToPatch(preset) {
-  return {
-    name: preset.name,
-    seed: preset.seed,
-    bpm: preset.bpm,
-    mode: preset.mode,
-    sound: preset.sound,
-    barStates: createPresetBarStates(preset.chords.length),
-    chords: preset.chords.map((value, index) => ({ bar: index, slot: 0, value })),
-    core: { ...preset.core },
-    soundControls: { ...preset.soundControls },
-  };
+  return createPatchFromPreset(preset);
 }
 
-export function applyPatch(els, state, patch) {
-  state.seed = patch.seed;
-  state.mode = patch.mode;
-  state.sound = patch.sound;
-  state.barStates = cloneBarStates(patch.barStates);
-  els.bpm.value = patch.bpm;
+export function applyPatch(els, patch) {
+  const normalized = normalizePatch(patch);
+  els.bpm.value = normalized.bpm;
 
-  applyControlGroup(els, patch.core);
-  applyControlGroup(els, patch.soundControls);
-  applyChords(els, patch.chords);
-  setActiveButton(".segment", "mode", state.mode);
-  setActiveButton(".sound-segment", "sound", state.sound);
+  applyControlGroup(els, normalized.core);
+  applyControlGroup(els, normalized.soundControls);
+  applyChords(els, normalized.chords);
+  setActiveButton(".segment", "mode", normalized.mode);
+  setActiveButton(".sound-segment", "sound", normalized.sound);
 }
 
 export function updateCompareUi(root, activeSlot) {
@@ -81,16 +68,6 @@ function applyChords(els, chords) {
   });
 }
 
-function createPresetBarStates(length) {
-  return Array.from({ length: 4 }, (_, index) => ({
-    split: false,
-    slots: [
-      { voicingSeed: 0, arpSeed: 0 },
-      { voicingSeed: 0, arpSeed: 0 },
-    ],
-  })).slice(0, Math.max(4, length));
-}
-
 function cloneBarStates(barStates) {
   return barStates.map((bar) => ({
     split: bar.split,
@@ -103,4 +80,3 @@ function setActiveButton(selector, dataKey, value) {
     button.classList.toggle("active", button.dataset[dataKey] === value);
   });
 }
-
