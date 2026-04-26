@@ -4,7 +4,6 @@ import {
   generateRoleMicroOffsetCents,
   pickMotionType,
   resolveDurationBeats,
-  shouldCarryForward,
 } from "./harmonic-roles.js";
 import { buildInfiniteSections } from "./harmonic-infinite.js";
 
@@ -517,80 +516,37 @@ function getRoleColorIntensity(role, settings) {
   return profile.color;
 }
 
-function pickClosestNote(notes, previousMidi) {
-  return notes.reduce((best, candidate) => {
-    const candidateMidi = octaveNear(candidate.midi, previousMidi);
-    const candidateDistance = Math.abs(candidateMidi - previousMidi);
-    if (!best || candidateDistance < best.distance) {
-      return { note: { ...candidate, midi: candidateMidi }, distance: candidateDistance };
-    }
-    return best;
-  }, null)?.note || notes[0];
-}
-
-function chooseMotionNote(notes, previousEvent, motionType, carriedFromPrevious) {
-  if (!previousEvent) return notes[0];
-
-  const previousPc = normalizePc(previousEvent.midi);
-  const candidates = notes.map((candidate) => {
-    let midi = octaveNear(candidate.midi, previousEvent.midi);
-    let distance = Math.abs(midi - previousEvent.midi);
-
-    if (motionType === "leap" && distance < 5) {
-      const up = midi + 12;
-      const down = midi - 12;
-      midi = Math.abs(up - previousEvent.midi) >= Math.abs(down - previousEvent.midi) ? up : down;
-      distance = Math.abs(midi - previousEvent.midi);
-    }
-
-    return {
-      note: { ...candidate, midi },
-      distance,
-      samePc: candidate.pc === previousPc,
-    };
-  });
-
-  if (carriedFromPrevious) {
-    const carried = candidates.filter((candidate) => candidate.samePc).sort((left, right) => left.distance - right.distance)[0];
-    if (carried) return carried.note;
-  }
-
-  if (motionType === "stay") {
-    return candidates.sort((left, right) => left.distance - right.distance)[0]?.note || notes[0];
-  }
-
-  if (motionType === "step") {
-    const steps = candidates.filter((candidate) => candidate.distance > 0 && candidate.distance <= 4).sort((left, right) => left.distance - right.distance);
-    return (steps[0] || candidates.sort((left, right) => left.distance - right.distance)[0])?.note || notes[0];
-  }
-
-  const leaps = candidates.filter((candidate) => candidate.distance >= 5).sort((left, right) => left.distance - right.distance);
-  return (leaps[0] || candidates.sort((left, right) => right.distance - left.distance)[0])?.note || notes[0];
-}
-
 const EVENT_SOFT_CEILING = 84;
 const EVENT_HARD_CEILING = 92;
+const EVENT_SOFT_FLOOR = 42;
 const EVENT_LOW_FLOOR = 36;
 const EVENT_HIGH_MEMORY = 78;
+const EVENT_LOW_MEMORY = 45;
 
-function scoreAssignedEventMidi(midi, previousMidi, motionType) {
+function scoreAssignedEventMidi(midi, previousMidi, targetMidi, motionType) {
   const distance = Math.abs(midi - previousMidi);
-  let score = distance;
+  const targetDistance = Math.abs(midi - targetMidi);
+  let score = distance + targetDistance * 0.62;
 
   if (midi > EVENT_SOFT_CEILING) score += (midi - EVENT_SOFT_CEILING) * 2.4;
   if (midi > EVENT_HARD_CEILING) score += (midi - EVENT_HARD_CEILING) * 5.2;
-  if (midi < EVENT_LOW_FLOOR) score += (EVENT_LOW_FLOOR - midi) * 1.2;
+  if (midi < EVENT_SOFT_FLOOR) score += (EVENT_SOFT_FLOOR - midi) * 1.35;
+  if (midi < EVENT_LOW_FLOOR) score += (EVENT_LOW_FLOOR - midi) * 4.8;
 
   if (previousMidi > EVENT_HIGH_MEMORY && midi > previousMidi) {
-    score += (midi - previousMidi) * 2.2 + (previousMidi - EVENT_HIGH_MEMORY) * 0.55;
+    score += (midi - previousMidi) * 2.2 + (previousMidi - EVENT_HIGH_MEMORY) * 0.45;
+  }
+
+  if (previousMidi < EVENT_LOW_MEMORY && midi < previousMidi) {
+    score += (previousMidi - midi) * 2.0 + (EVENT_LOW_MEMORY - previousMidi) * 0.45;
   }
 
   if (previousMidi > EVENT_SOFT_CEILING && midi >= EVENT_SOFT_CEILING) {
     score += 8;
   }
 
-  if (previousMidi > EVENT_HIGH_MEMORY && midi < previousMidi) {
-    score -= Math.min(5, (previousMidi - EVENT_HIGH_MEMORY) * 0.55);
+  if (previousMidi < EVENT_SOFT_FLOOR && midi <= EVENT_SOFT_FLOOR) {
+    score += 6;
   }
 
   if (motionType === "leap") {
@@ -611,9 +567,12 @@ function keepAssignedPitchClass(note, previousEvent, motionType) {
   const midi = candidates
     .map((candidate) => ({
       midi: candidate,
-      score: scoreAssignedEventMidi(candidate, previousEvent.midi, motionType),
+      score: scoreAssignedEventMidi(candidate, previousEvent.midi, note.midi, motionType),
     }))
-    .sort((left, right) => left.score - right.score || Math.abs(left.midi - previousEvent.midi) - Math.abs(right.midi - previousEvent.midi))[0]?.midi ?? nearest;
+    .sort((left, right) =>
+      left.score - right.score ||
+      Math.abs(left.midi - note.midi) - Math.abs(right.midi - note.midi) ||
+      Math.abs(left.midi - previousEvent.midi) - Math.abs(right.midi - previousEvent.midi))[0]?.midi ?? nearest;
 
   return {
     ...note,
@@ -643,6 +602,97 @@ function addRoleBasedEvent(events, note, sectionIndex, voiceId, startBeat, durat
     driftEnd,
     motionType: details.motionType || pickMotionType(role, rand),
     carriedFromPrevious: details.carriedFromPrevious,
+  });
+}
+
+function noteVoiceId(note, fallback) {
+  return note.voiceId ?? fallback;
+}
+
+function motionTypeFromMovement(previousEvent, midi) {
+  if (!previousEvent) return "stay";
+  const movement = Math.abs(midi - previousEvent.midi);
+  if (movement === 0) return "stay";
+  return movement <= 2 ? "step" : "leap";
+}
+
+function getArpStepCount(sectionBeats, settings) {
+  const densitySteps = Math.round(lerp(sectionBeats, sectionBeats * 4, settings.arpDensity));
+  return clamp(densitySteps, sectionBeats <= 2 ? 2 : 4, sectionBeats <= 2 ? 8 : 16);
+}
+
+function emitPadEvents(events, context) {
+  const { section, sectionIndex, notes, rand, settings, prevChord, nextChord } = context;
+  const startBeat = section.startBeat;
+  const durationBeats = section.durationBeats;
+
+  notes.forEach((note, index) => {
+    const voiceId = noteVoiceId(note, index);
+    addRoleBasedEvent(events, note, sectionIndex, voiceId, startBeat, durationBeats, rand, settings, prevChord, section, nextChord, {
+      motionType: "stay",
+      carriedFromPrevious: false,
+    });
+  });
+}
+
+function emitArpEvents(events, context, previousVoiceEvents) {
+  const { section, sectionIndex, notes, normalizedSeed, rand, settings, prevChord, nextChord, previousSection } = context;
+  const arpNotes = buildArpOrder(notes, section, settings, previousSection, normalizedSeed);
+  const steps = getArpStepCount(section.durationBeats, settings);
+  const stepDuration = section.durationBeats / steps;
+
+  for (let step = 0; step < steps; step += 1) {
+    const note = arpNotes[step % arpNotes.length];
+    const voiceId = noteVoiceId(note, step % arpNotes.length);
+    const previousEvent = previousVoiceEvents.get(voiceId) || null;
+    const selected = keepAssignedPitchClass(note, previousEvent, "step");
+    const startBeat = section.startBeat + step * stepDuration;
+    const motionType = motionTypeFromMovement(previousEvent, selected.midi);
+
+    addRoleBasedEvent(events, selected, sectionIndex, voiceId, startBeat, stepDuration, rand, settings, prevChord, section, nextChord, {
+      motionType,
+      carriedFromPrevious: false,
+    });
+
+    previousVoiceEvents.set(voiceId, {
+      midi: selected.midi,
+      role: selected.harmonicRole || selected.role,
+    });
+  }
+}
+
+function emitEvolveEvents(events, context, previousVoiceEvents) {
+  const { section, sectionIndex, notes, rand, settings, prevChord, nextChord } = context;
+  const barStart = section.startBeat;
+  const barEnd = section.startBeat + section.durationBeats;
+
+  notes.forEach((note, index) => {
+    const voiceId = noteVoiceId(note, index);
+    const role = note.harmonicRole || assignHarmonicRole(note);
+    let cursor = barStart;
+    let previousEvent = previousVoiceEvents.get(voiceId) || null;
+
+    while (cursor < barEnd - 1e-6) {
+      const selected = keepAssignedPitchClass(note, previousEvent, pickMotionType(role, rand));
+      const motionType = motionTypeFromMovement(previousEvent, selected.midi);
+      const remainingBeats = barEnd - cursor;
+      const durationBeats = Math.min(remainingBeats, resolveDurationBeats(role, "evolve", rand, {
+        sectionBeats: section.durationBeats,
+        remainingBeats,
+      }));
+
+      addRoleBasedEvent(events, selected, sectionIndex, voiceId, cursor, durationBeats, rand, settings, prevChord, section, nextChord, {
+        motionType,
+        carriedFromPrevious: false,
+      });
+
+      previousEvent = {
+        midi: selected.midi,
+        role,
+      };
+      previousVoiceEvents.set(voiceId, previousEvent);
+      cursor += durationBeats;
+    }
   });
 }
 
@@ -694,90 +744,28 @@ function generateRoleBasedEvents(events, sections, settings, normalizedSeed) {
   sections.forEach((section, index) => {
     const prevChord = sections[(index - 1 + sections.length) % sections.length];
     const nextChord = sections[(index + 1) % sections.length];
-    const baseBeat = section.startBeat;
-    const sectionBeats = section.durationBeats;
     const notes = section.notes.map((note) => ({
       ...note,
       harmonicRole: note.harmonicRole || assignHarmonicRole(note),
     }));
+    const context = {
+      section,
+      sectionIndex: index,
+      notes,
+      normalizedSeed,
+      rand,
+      settings,
+      prevChord,
+      nextChord,
+      previousSection: sections[index - 1],
+    };
 
-    if (settings.mode === "pad" || settings.mode === "evolve") {
-      const sustainedCount = settings.mode === "pad" ? Math.min(5, notes.length) : Math.min(4, notes.length);
-      for (let voiceIndex = 0; voiceIndex < sustainedCount; voiceIndex += 1) {
-        const baseNote = notes[voiceIndex % notes.length];
-        const previousEvent = previousVoiceEvents.get(voiceIndex) || null;
-        const sharedWithPrevious = Boolean(prevChord?.notes.some((candidate) => candidate.pc === baseNote.pc));
-        const sharedWithNext = Boolean(nextChord?.notes.some((candidate) => candidate.pc === baseNote.pc));
-        const role = baseNote.harmonicRole;
-        const motionType = pickMotionType(role, rand);
-        const carriedFromPrevious = Boolean(previousEvent) && shouldCarryForward(role, rand, { sharedWithPrevious, sharedWithNext });
-        const selected = settings.generatorMode === "infinite"
-          ? keepAssignedPitchClass(baseNote, previousEvent, motionType)
-          : previousEvent ? chooseMotionNote(notes, previousEvent, motionType, carriedFromPrevious) : baseNote;
-        const durationBeats = resolveDurationBeats(role, settings.mode, rand, {
-          sectionBeats,
-          remainingBeats: sectionBeats,
-        });
-
-        addRoleBasedEvent(events, selected, index, voiceIndex, baseBeat, Math.min(sectionBeats, durationBeats), rand, settings, prevChord, section, nextChord, {
-          motionType,
-          carriedFromPrevious,
-        });
-
-        previousVoiceEvents.set(voiceIndex, {
-          midi: selected.midi,
-          role,
-        });
-      }
-    }
-
-    if (settings.mode === "arp") {
-      const previousSection = sections[index - 1];
-      const arpNotes = buildArpOrder(notes, section, settings, previousSection, normalizedSeed);
-      const offsets = getArpStepOffsets(sectionBeats, settings);
-      for (let step = 0; step < offsets.length; step += 1) {
-        const note = arpNotes[step % arpNotes.length];
-        const voiceId = note.voiceId ?? (step % arpNotes.length);
-        const role = note.harmonicRole;
-        const previousEvent = previousVoiceEvents.get(voiceId) || null;
-        const sharedWithPrevious = Boolean(prevChord?.notes.some((candidate) => candidate.pc === note.pc));
-        const sharedWithNext = Boolean(nextChord?.notes.some((candidate) => candidate.pc === note.pc));
-        const motionType = pickMotionType(role, rand);
-        const carriedFromPrevious = Boolean(previousEvent) && shouldCarryForward(role, rand, { sharedWithPrevious, sharedWithNext });
-        const selected = settings.generatorMode === "infinite"
-          ? keepAssignedPitchClass(note, previousEvent, motionType)
-          : previousEvent ? chooseMotionNote(arpNotes, previousEvent, motionType, carriedFromPrevious) : note;
-        const durationBeats = resolveDurationBeats(role, "arp", rand, {
-          sectionBeats,
-          remainingBeats: Math.max(0.25, sectionBeats - offsets[step]),
-        });
-
-        addRoleBasedEvent(events, selected, index, voiceId, baseBeat + offsets[step], durationBeats, rand, settings, prevChord, section, nextChord, {
-          motionType,
-          carriedFromPrevious,
-        });
-
-        previousVoiceEvents.set(voiceId, {
-          midi: selected.midi,
-          role,
-        });
-      }
-    }
-
-    if (settings.mode === "evolve") {
-      const accents = sectionBeats <= 2 ? [0.75, 1.5] : [0.75, 1.5, 2.5, 3.25];
-      accents.forEach((offset, step) => {
-        if (offset >= sectionBeats) return;
-        const accentSource = notes[(step + 1) % notes.length];
-        const accentRole = accentSource.harmonicRole === "anchor" ? "color" : accentSource.harmonicRole;
-        const motionType = pickMotionType(accentRole, rand);
-        const accentNotes = notes.filter((note) => note.harmonicRole !== "anchor");
-        const selected = pickClosestNote(accentNotes.length ? accentNotes : notes, accentSource.midi);
-        addRoleBasedEvent(events, { ...selected, harmonicRole: accentRole, midi: selected.midi + (step > 1 ? 12 : 0) }, index, (step + 1) % notes.length, baseBeat + offset, 0.45, rand, settings, prevChord, section, nextChord, {
-          motionType,
-          carriedFromPrevious: false,
-        });
-      });
+    if (settings.mode === "pad") {
+      emitPadEvents(events, context);
+    } else if (settings.mode === "arp") {
+      emitArpEvents(events, context, previousVoiceEvents);
+    } else {
+      emitEvolveEvents(events, context, previousVoiceEvents);
     }
   });
 }

@@ -56,6 +56,7 @@ test("normalizes unsafe patch values", () => {
   assert.equal(restored.slots.B.core.generatorMode, "classic");
   assert.equal(restored.slots.B.core.harmonicMotion, "subtle");
   assert.equal(restored.slots.B.core.harmonicDistanceTarget, 1);
+  assert.equal(restored.slots.B.core.harmonicDistanceFalloff, 1);
   assert.equal(restored.slots.B.core.ghostAmount, 100);
   assert.equal(restored.slots.B.core.drift, 0);
   assert.equal(restored.slots.B.soundControls.cutoff, 6400);
@@ -108,7 +109,7 @@ test("patch conversion preserves role-based generator mode", () => {
   assert.equal(patchToCoreSettings(patch).harmonicMotion, "restless");
 });
 
-test("patch conversion preserves harmonic distance target", () => {
+test("patch conversion preserves harmonic distance controls", () => {
   const patch = createDefaultPatch({
     core: {
       ...createDefaultPatch().core,

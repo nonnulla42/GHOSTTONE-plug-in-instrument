@@ -70,6 +70,12 @@ test("getNoteSimilarity supports configurable harmonic distance targets", () => 
   assert.equal(getNoteSimilarity(0, 2, { harmonicDistanceTarget: 7 }), 0);
 });
 
+test("getNoteSimilarity can disable adjacent harmonic distance falloff", () => {
+  assert.equal(getNoteSimilarity(0, 4, { harmonicDistanceTarget: 4, harmonicDistanceFalloff: 0 }), 0.5);
+  assert.equal(getNoteSimilarity(0, 5, { harmonicDistanceTarget: 4, harmonicDistanceFalloff: 0 }), 0);
+  assert.equal(getNoteSimilarity(0, 5, { harmonicDistanceTarget: 4, harmonicDistanceFalloff: 1 }), 0.25);
+});
+
 test("computeChordSimilarityDetails reports exact and distance matches", () => {
   const current = currentChord();
   const candidate = { pitchClasses: [0, 4, 2, 6] };

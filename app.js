@@ -322,6 +322,7 @@ function bindEvents() {
     els.colorMode,
     els.harmonicMotion,
     els.harmonicDistanceTarget,
+    els.harmonicDistanceFalloff,
     els.stayMusical,
     els.ghostEnabled,
     els.voicingStyle,

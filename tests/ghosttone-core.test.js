@@ -20,6 +20,33 @@ function normalizePc(pc) {
   return ((pc % 12) + 12) % 12;
 }
 
+function cmaj7Progression(length = 4) {
+  return Array.from({ length }, () => ({
+    split: false,
+    slots: [{ chord: "Cmaj7", voicingSeed: 0, arpSeed: 0 }],
+  }));
+}
+
+function sectionEvents(result, sectionIndex) {
+  return result.events.filter((event) => event.sectionIndex === sectionIndex);
+}
+
+function assertNoVoiceOverlaps(events) {
+  const byVoice = new Map();
+  events.forEach((event) => {
+    if (!byVoice.has(event.voiceId)) byVoice.set(event.voiceId, []);
+    byVoice.get(event.voiceId).push(event);
+  });
+
+  byVoice.forEach((voiceEvents) => {
+    voiceEvents.sort((left, right) => left.startBeat - right.startBeat);
+    for (let index = 1; index < voiceEvents.length; index += 1) {
+      const previousEnd = voiceEvents[index - 1].startBeat + voiceEvents[index - 1].durationBeats;
+      assert.ok(voiceEvents[index].startBeat >= previousEnd - 1e-6);
+    }
+  });
+}
+
 test("parseChord returns chord tones with roles", () => {
   const chord = parseChord("Am9");
 
@@ -171,11 +198,75 @@ test("infinite generator evolves sections deterministically and preserves anchor
   assert.ok(first.sections.slice(1).some((section) => (section.state?.movedVoices || 0) > 0));
 });
 
+test("pad mode emits one full-section event per harmonic voice", () => {
+  const result = generatePattern({
+    generatorMode: "infinite",
+    mode: "pad",
+    harmonicMotion: "subtle",
+    harmonyLock: 0.68,
+    stayMusical: true,
+    ghostEnabled: false,
+  }, cmaj7Progression(), 13010);
+
+  result.sections.forEach((section, sectionIndex) => {
+    const events = sectionEvents(result, sectionIndex);
+    const voiceIds = new Set(section.notes.map((note) => note.voiceId));
+
+    assert.equal(events.length, section.notes.length);
+    assert.equal(new Set(events.map((event) => event.voiceId)).size, voiceIds.size);
+    events.forEach((event) => {
+      assert.equal(event.startBeat, section.startBeat);
+      assert.equal(event.durationBeats, section.durationBeats);
+      assert.ok(voiceIds.has(event.voiceId));
+    });
+  });
+});
+
+test("arp mode uses uniform step durations without per-voice overlap", () => {
+  const result = generatePattern({
+    generatorMode: "infinite",
+    mode: "arp",
+    arpDensity: 0.75,
+    arpFeel: "syncopated",
+    harmonicMotion: "subtle",
+    harmonyLock: 0.68,
+    stayMusical: true,
+    ghostEnabled: false,
+  }, cmaj7Progression(), 13011);
+
+  result.sections.forEach((section, sectionIndex) => {
+    const events = sectionEvents(result, sectionIndex).sort((left, right) => left.startBeat - right.startBeat);
+    const expectedDuration = section.durationBeats / events.length;
+
+    events.forEach((event, index) => {
+      assert.ok(Math.abs(event.durationBeats - expectedDuration) < 1e-9);
+      assert.ok(Math.abs(event.startBeat - (section.startBeat + index * expectedDuration)) < 1e-9);
+    });
+    assertNoVoiceOverlaps(events);
+  });
+});
+
+test("evolve mode keeps each harmonic voice monophonic", () => {
+  const result = generatePattern({
+    generatorMode: "infinite",
+    mode: "evolve",
+    harmonicMotion: "evolving",
+    harmonyLock: 0.52,
+    stayMusical: true,
+    ghostEnabled: false,
+  }, cmaj7Progression(), 13012);
+
+  result.sections.forEach((section, sectionIndex) => {
+    const events = sectionEvents(result, sectionIndex);
+    const voiceIds = new Set(section.notes.map((note) => note.voiceId));
+
+    assert.ok(events.length >= section.notes.length);
+    assert.ok(events.every((event) => voiceIds.has(event.voiceId)));
+    assertNoVoiceOverlaps(events);
+  });
+});
+
 test("infinite arp events preserve each section chord tone", () => {
-  const cmaj7Progression = Array.from({ length: 4 }, () => ({
-    split: false,
-    slots: [{ chord: "Cmaj7", voicingSeed: 0, arpSeed: 0 }],
-  }));
   const result = generatePattern({
     generatorMode: "infinite",
     harmonicMotion: "subtle",
@@ -184,7 +275,7 @@ test("infinite arp events preserve each section chord tone", () => {
     arpDensity: 0.7,
     harmonyLock: 0.68,
     stayMusical: true,
-  }, cmaj7Progression, 13013);
+  }, cmaj7Progression(), 13013);
 
   result.sections.forEach((section, sectionIndex) => {
     const sectionPcs = new Set(section.notes.map((note) => note.pc));
@@ -198,10 +289,6 @@ test("infinite arp events preserve each section chord tone", () => {
 });
 
 test("infinite arp events avoid upward register ratcheting", () => {
-  const cmaj7Progression = Array.from({ length: 4 }, () => ({
-    split: false,
-    slots: [{ chord: "Cmaj7", voicingSeed: 0, arpSeed: 0 }],
-  }));
   const result = generatePattern({
     generatorMode: "infinite",
     harmonicMotion: "subtle",
@@ -210,12 +297,17 @@ test("infinite arp events avoid upward register ratcheting", () => {
     arpDensity: 0.75,
     harmonyLock: 0.68,
     stayMusical: true,
-  }, cmaj7Progression, 13013);
+  }, cmaj7Progression(), 13013);
   const eventMidis = result.events.map((event) => event.midi);
   const sectionVoiceIds = new Set(result.sections.flatMap((section) => section.notes.map((note) => note.voiceId)));
 
   assert.ok(Math.max(...eventMidis) <= 84);
   assert.ok(result.events.every((event) => sectionVoiceIds.has(event.voiceId)));
+  result.events.forEach((event) => {
+    const section = result.sections[event.sectionIndex];
+    const sourceVoice = section.notes.find((note) => note.voiceId === event.voiceId);
+    assert.ok(Math.abs(event.midi - sourceVoice.midi) <= 12);
+  });
 });
 
 function range(values) {
