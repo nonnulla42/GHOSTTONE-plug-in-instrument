@@ -44,6 +44,10 @@ export function getElements(root = document) {
     attack: root.querySelector("#attack"),
     release: root.querySelector("#release"),
     space: root.querySelector("#space"),
+    reverbMix: root.querySelector("#reverbMix"),
+    reverbMixValue: root.querySelector("#reverbMixValue"),
+    delayMix: root.querySelector("#delayMix"),
+    delayMixValue: root.querySelector("#delayMixValue"),
     gridView: root.querySelector("#gridView"),
     currentChord: root.querySelector("#currentChord"),
     rangeReadout: root.querySelector("#rangeReadout"),
@@ -117,6 +121,8 @@ export function readSoundSettings(els, sound) {
     attack: Number(els.attack.value),
     release: Number(els.release.value),
     space: Number(els.space.value) / 100,
+    reverbMix: Number(els.reverbMix?.value ?? 18) / 100,
+    delayMix: Number(els.delayMix?.value ?? 0) / 100,
   };
 }
 
@@ -200,6 +206,8 @@ export function updateReadouts(els, pattern, settings, bpm, soundSettings, curre
   els.arpContinuityValue.textContent = Math.round(settings.arpContinuity * 100);
   if (els.scaleInfluenceValue) els.scaleInfluenceValue.textContent = Math.round((settings.scaleInfluence ?? 0) * 100);
   if (els.memoryStrengthValue) els.memoryStrengthValue.textContent = Math.round((settings.memoryStrength ?? 0.5) * 100);
+  if (els.reverbMixValue) els.reverbMixValue.textContent = Math.round((soundSettings.reverbMix ?? 0) * 100);
+  if (els.delayMixValue) els.delayMixValue.textContent = Math.round((soundSettings.delayMix ?? 0) * 100);
   els.rangeReadout.textContent = `+/-${Math.round(maxOffset)} cents`;
   els.eventReadout.textContent = String(pattern.events.length);
   els.currentChord.textContent = pattern.sections[currentSectionIndex]?.label || "-";

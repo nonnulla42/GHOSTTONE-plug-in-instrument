@@ -347,7 +347,7 @@ function bindEvents() {
     control.addEventListener("input", () => updateActivePatchFromUi());
   });
 
-  [els.waveform, els.cutoff, els.attack, els.release, els.space].forEach((control) => {
+  [els.waveform, els.cutoff, els.attack, els.release, els.space, els.reverbMix, els.delayMix].forEach((control) => {
     control.addEventListener("input", () => updateActivePatchFromUi({ soundOnly: true }));
   });
 

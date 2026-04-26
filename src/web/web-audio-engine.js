@@ -3,6 +3,20 @@ import { buildSynthVoicePlan, createWebAudioSynthVoice } from "../audio/synth-vo
 import { VoiceManager } from "../audio/voice-manager.js";
 import { createInfiniteStreamRuntime, ensureInfiniteBeats } from "../core/infinite-stream-runtime.js";
 
+function createConvolutionReverb(ctx, decaySeconds = 3.5) {
+  const length = Math.round(ctx.sampleRate * decaySeconds);
+  const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const data = impulse.getChannelData(c);
+    for (let i = 0; i < length; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 2.5);
+    }
+  }
+  const conv = ctx.createConvolver();
+  conv.buffer = impulse;
+  return conv;
+}
+
 export function getBrowserScheduleBlock({ audioCurrentTime, loopStartTime, bpm, sampleRate, loopBeats, lookaheadSeconds, isLooping = true }) {
   const elapsedSeconds = Math.max(0, audioCurrentTime - loopStartTime);
   const absoluteStartBeat = elapsedSeconds / (60 / bpm);
@@ -68,12 +82,58 @@ export class WebAudioEngine {
     filter.type = "lowpass";
     filter.Q.value = 0.7;
 
+    // Reverb: convolution with procedural IR + high-cut for warmth
+    const reverb = createConvolutionReverb(ctx, 3.5);
+    const reverbHighCut = ctx.createBiquadFilter();
+    reverbHighCut.type = "lowpass";
+    reverbHighCut.frequency.value = 3800;
+    const reverbWet = ctx.createGain();
+    reverbWet.gain.value = 0;
+
+    // Delay: 1/8-note BPM-synced with feedback
+    const delay = ctx.createDelay(2.0);
+    delay.delayTime.value = 0.25;
+    const delayFeedback = ctx.createGain();
+    delayFeedback.gain.value = 0.32;
+    const delayWet = ctx.createGain();
+    delayWet.gain.value = 0;
+
+    // Dry chain
     filter.connect(compressor);
     compressor.connect(master);
+
+    // Reverb send: filter → reverb → highcut → wet → master
+    filter.connect(reverb);
+    reverb.connect(reverbHighCut);
+    reverbHighCut.connect(reverbWet);
+    reverbWet.connect(master);
+
+    // Delay send: filter → delay ↔ feedback, delay → wet → master
+    filter.connect(delay);
+    delay.connect(delayFeedback);
+    delayFeedback.connect(delay);
+    delay.connect(delayWet);
+    delayWet.connect(master);
+
     master.connect(ctx.destination);
 
-    this.audio = { ctx, filter, master };
+    this.audio = { ctx, filter, master, reverbWet, delay, delayWet, delayFeedback };
     return this.audio;
+  }
+
+  updateMasterFx(soundSettings, bpm) {
+    if (!this.audio) return;
+    const { ctx, reverbWet, delay, delayWet, delayFeedback } = this.audio;
+    const now = ctx.currentTime;
+    const eighthNote = (60 / bpm) * 0.5;
+
+    // exponential curve: perceived loudness matches slider position
+    const rawReverb = soundSettings.reverbMix || 0;
+    const rawDelay = soundSettings.delayMix || 0;
+    reverbWet.gain.setTargetAtTime(rawReverb * rawReverb, now, 0.08);
+    delayWet.gain.setTargetAtTime(rawDelay * rawDelay, now, 0.08);
+    delay.delayTime.setTargetAtTime(eighthNote, now, 0.08);
+    delayFeedback.gain.setTargetAtTime(Math.min(0.32, 0.6), now, 0.08);
   }
 
   async start(pattern, coreSettings, soundSettings, bpm) {
@@ -115,6 +175,7 @@ export class WebAudioEngine {
     if (!this.isPlaying) return;
 
     const { ctx } = this.setup();
+    this.updateMasterFx(soundSettings, bpm);
     this.voiceManager.advanceTo(ctx.currentTime);
     const isInfinite = Boolean(this.streamRuntime);
     const livePattern = this.getPlaybackPattern(pattern);

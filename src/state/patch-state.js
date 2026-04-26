@@ -47,6 +47,8 @@ export const DEFAULT_PATCH = Object.freeze({
     attack: 0.28,
     release: 0.7,
     space: 18,
+    reverbMix: 18,
+    delayMix: 0,
   }),
 });
 
@@ -165,6 +167,8 @@ export function patchToSoundSettings(patch) {
     attack: normalized.soundControls.attack,
     release: normalized.soundControls.release,
     space: normalized.soundControls.space / 100,
+    reverbMix: normalized.soundControls.reverbMix / 100,
+    delayMix: normalized.soundControls.delayMix / 100,
   };
 }
 
@@ -271,6 +275,8 @@ function normalizeSoundControls(soundControls = {}) {
     attack: clampNumber(soundControls.attack, 0.01, 1.2, DEFAULT_PATCH.soundControls.attack),
     release: clampNumber(soundControls.release, 0.05, 2.5, DEFAULT_PATCH.soundControls.release),
     space: clampNumber(soundControls.space, 0, 100, DEFAULT_PATCH.soundControls.space),
+    reverbMix: clampNumber(soundControls.reverbMix, 0, 100, DEFAULT_PATCH.soundControls.reverbMix),
+    delayMix: clampNumber(soundControls.delayMix, 0, 100, DEFAULT_PATCH.soundControls.delayMix),
   };
 }
 
