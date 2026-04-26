@@ -21,6 +21,8 @@ export const DEFAULT_PATCH = Object.freeze({
   core: Object.freeze({
     generatorMode: "classic",
     harmonicMotion: "subtle",
+    harmonicDistanceTarget: 1,
+    harmonicDistanceFalloff: 1,
     ghostAmount: 48,
     drift: 35,
     harmonyLock: 68,
@@ -128,6 +130,8 @@ export function patchToCoreSettings(patch) {
   return {
     generatorMode: normalized.core.generatorMode,
     harmonicMotion: normalized.core.harmonicMotion,
+    harmonicDistanceTarget: normalized.core.harmonicDistanceTarget,
+    harmonicDistanceFalloff: normalized.core.harmonicDistanceFalloff,
     mode: normalized.mode,
     ghostAmount: normalized.core.ghostAmount / 100,
     drift: normalized.core.drift / 100,
@@ -232,6 +236,8 @@ function normalizeCore(core = {}) {
   return {
     generatorMode: ["classic", "roleBased", "infinite"].includes(core.generatorMode) ? core.generatorMode : DEFAULT_PATCH.core.generatorMode,
     harmonicMotion: ["static", "subtle", "evolving", "restless"].includes(core.harmonicMotion) ? core.harmonicMotion : DEFAULT_PATCH.core.harmonicMotion,
+    harmonicDistanceTarget: normalizeInt(core.harmonicDistanceTarget, DEFAULT_PATCH.core.harmonicDistanceTarget, 0) % 12,
+    harmonicDistanceFalloff: clampNumber(core.harmonicDistanceFalloff, 0, 6, DEFAULT_PATCH.core.harmonicDistanceFalloff),
     ghostAmount: clampNumber(core.ghostAmount, 0, 100, DEFAULT_PATCH.core.ghostAmount),
     drift: clampNumber(core.drift, 0, 100, DEFAULT_PATCH.core.drift),
     harmonyLock: clampNumber(core.harmonyLock, 0, 100, DEFAULT_PATCH.core.harmonyLock),

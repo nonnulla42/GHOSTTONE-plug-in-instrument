@@ -3,11 +3,14 @@ import test from "node:test";
 
 import {
   applyVoiceLeading,
+  computeChordSimilarityDetails,
   computeChordSimilarity,
   computePitchCenterPenalty,
   countCommonPitchClasses,
   generateCandidates,
   generateNextChord,
+  getRegisterDriftWeight,
+  getNoteSimilarity,
   scoreCandidate,
 } from "../src/core/harmonic-chord-evolution.js";
 
@@ -58,13 +61,34 @@ test("computeChordSimilarity counts exact and semitone relationships", () => {
   assert.equal(computeChordSimilarity(related, current), 2.5);
 });
 
+test("getNoteSimilarity supports configurable harmonic distance targets", () => {
+  assert.equal(getNoteSimilarity(0, 0, { harmonicDistanceTarget: 7 }), 1);
+  assert.equal(getNoteSimilarity(0, 7, { harmonicDistanceTarget: 7 }), 0.5);
+  assert.equal(getNoteSimilarity(7, 0, { harmonicDistanceTarget: 7 }), 0.5);
+  assert.equal(getNoteSimilarity(0, 4, { harmonicDistanceTarget: 4 }), 0.5);
+  assert.equal(getNoteSimilarity(0, 5, { harmonicDistanceTarget: 4 }), 0.25);
+  assert.equal(getNoteSimilarity(0, 2, { harmonicDistanceTarget: 7 }), 0);
+});
+
+test("computeChordSimilarityDetails reports exact and distance matches", () => {
+  const current = currentChord();
+  const candidate = { pitchClasses: [0, 4, 2, 6] };
+  const details = computeChordSimilarityDetails(candidate, current, {
+    settings: { harmonicDistanceTarget: 7 },
+  });
+
+  assert.equal(details.exactMatches, 2);
+  assert.equal(details.distanceMatches, 2);
+  assert.equal(details.totalScore, 3);
+});
+
 test("scoreCandidate rejects candidates with no harmonic similarity", () => {
   const current = currentChord();
-  const unrelated = { pitchClasses: [2, 2, 9, 9] };
+  const unrelated = { pitchClasses: [1, 2, 5, 8] };
 
   assert.equal(scoreCandidate(unrelated, current, {
     random: makeRandom(1002),
-    settings: { harmonicMotion: "subtle" },
+    settings: { harmonicMotion: "subtle", harmonicDistanceTarget: 0 },
   }), null);
 });
 
@@ -117,6 +141,62 @@ test("generateNextChord is deterministic and preserves voice continuity", () => 
   assert.equal(first.notes.length, 4);
   assert.ok(countCommonPitchClasses(first, current) >= 1);
   assert.ok(movementSum(current, first) > 0);
+});
+
+test("harmonic distance target changes candidate scoring", () => {
+  const current = currentChord();
+  const fourthRelated = { pitchClasses: [0, 8, 3, 5], qualityWeight: 1 };
+  const secondTarget = scoreCandidate(fourthRelated, current, {
+    random: makeRandom(1005),
+    settings: { harmonicMotion: "evolving", harmonicDistanceTarget: 2 },
+  });
+  const fourthTarget = scoreCandidate(fourthRelated, current, {
+    random: makeRandom(1005),
+    settings: { harmonicMotion: "evolving", harmonicDistanceTarget: 4 },
+  });
+
+  assert.ok(fourthTarget.similarity >= secondTarget.similarity);
+  assert.ok(fourthTarget.score >= secondTarget.score);
+});
+
+test("getRegisterDriftWeight softly penalizes upward register drift", () => {
+  assert.ok(getRegisterDriftWeight(70, 58) < 1);
+  assert.ok(getRegisterDriftWeight(52, 58) > 1);
+});
+
+test("high harmonic distance targets prefer equivalent downward motion over upward drift", () => {
+  const current = {
+    notes: [
+      { pitchClass: 0, midi: 48, voiceId: 0, role: "anchor" },
+      { pitchClass: 4, midi: 52, voiceId: 1, role: "color" },
+      { pitchClass: 7, midi: 55, voiceId: 2, role: "color" },
+      { pitchClass: 11, midi: 59, voiceId: 3, role: "tension" },
+    ],
+  };
+  const history = [
+    current,
+    {
+      notes: current.notes.map((note) => ({ ...note, midi: note.midi + 1 })),
+    },
+  ];
+  const upward = {
+    pitchClasses: [4, 8, 11, 3],
+    qualityWeight: 1,
+  };
+  const downward = {
+    pitchClasses: [8, 0, 3, 7],
+    qualityWeight: 1,
+  };
+  const options = {
+    random: makeRandom(1006),
+    settings: { harmonicMotion: "evolving", harmonicDistanceTarget: 4 },
+    history,
+  };
+  const upwardScore = scoreCandidate(upward, current, options);
+  const downwardScore = scoreCandidate(downward, current, options);
+
+  assert.ok(downwardScore.gravityWeight > upwardScore.gravityWeight);
+  assert.ok(downwardScore.score > upwardScore.score);
 });
 
 test("recent chord memory lowers the score of repeated candidates", () => {

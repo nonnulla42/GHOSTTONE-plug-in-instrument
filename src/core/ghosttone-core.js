@@ -47,6 +47,8 @@ const roleIntensity = {
 export const defaultSettings = Object.freeze({
   generatorMode: "classic",
   harmonicMotion: "subtle",
+  harmonicDistanceTarget: 1,
+  harmonicDistanceFalloff: 1,
   mode: "pad",
   ghostAmount: 0.48,
   drift: 0.35,
@@ -114,6 +116,8 @@ function normalizeSettings(settings = {}) {
     ...merged,
     generatorMode: ["classic", "roleBased", "infinite"].includes(merged.generatorMode) ? merged.generatorMode : defaultSettings.generatorMode,
     harmonicMotion: ["static", "subtle", "evolving", "restless"].includes(merged.harmonicMotion) ? merged.harmonicMotion : defaultSettings.harmonicMotion,
+    harmonicDistanceTarget: normalizeDistanceTarget(merged.harmonicDistanceTarget, defaultSettings.harmonicDistanceTarget),
+    harmonicDistanceFalloff: normalizeDistanceFalloff(merged.harmonicDistanceFalloff, defaultSettings.harmonicDistanceFalloff),
     mode: ["pad", "arp", "evolve"].includes(merged.mode) ? merged.mode : defaultSettings.mode,
     ghostAmount: normalizeUnit(merged.ghostAmount, defaultSettings.ghostAmount),
     drift: normalizeUnit(merged.drift, defaultSettings.drift),
@@ -127,6 +131,18 @@ function normalizeSettings(settings = {}) {
     arpVariation: normalizeUnit(merged.arpVariation, defaultSettings.arpVariation),
     arpContinuity: normalizeUnit(merged.arpContinuity, defaultSettings.arpContinuity),
   };
+}
+
+function normalizeDistanceTarget(value, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return normalizePc(Math.trunc(number));
+}
+
+function normalizeDistanceFalloff(value, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return clamp(number, 0, 6);
 }
 
 function normalizeSlot(slot, fallbackChord = "C") {

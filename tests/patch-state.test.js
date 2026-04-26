@@ -55,6 +55,7 @@ test("normalizes unsafe patch values", () => {
   assert.equal(restored.slots.B.mode, "pad");
   assert.equal(restored.slots.B.core.generatorMode, "classic");
   assert.equal(restored.slots.B.core.harmonicMotion, "subtle");
+  assert.equal(restored.slots.B.core.harmonicDistanceTarget, 1);
   assert.equal(restored.slots.B.core.ghostAmount, 100);
   assert.equal(restored.slots.B.core.drift, 0);
   assert.equal(restored.slots.B.soundControls.cutoff, 6400);
@@ -85,6 +86,7 @@ test("patch conversion feeds core, progression, and sound adapters", () => {
   assert.equal(patchToCoreSettings(patch).ghostAmount, 0.48);
   assert.equal(patchToCoreSettings(patch).generatorMode, "classic");
   assert.equal(patchToCoreSettings(patch).harmonicMotion, "subtle");
+  assert.equal(patchToCoreSettings(patch).harmonicDistanceTarget, 1);
   assert.equal(patchToCoreSettings(patch).mode, "pad");
   assert.equal(patchToSoundSettings(patch).space, 0.18);
   assert.deepEqual(
@@ -104,6 +106,21 @@ test("patch conversion preserves role-based generator mode", () => {
 
   assert.equal(patchToCoreSettings(patch).generatorMode, "roleBased");
   assert.equal(patchToCoreSettings(patch).harmonicMotion, "restless");
+});
+
+test("patch conversion preserves harmonic distance target", () => {
+  const patch = createDefaultPatch({
+    core: {
+      ...createDefaultPatch().core,
+      generatorMode: "infinite",
+      harmonicDistanceTarget: 7,
+      harmonicDistanceFalloff: 2,
+    },
+  });
+
+  assert.equal(patch.core.harmonicDistanceTarget, 7);
+  assert.equal(patchToCoreSettings(patch).harmonicDistanceTarget, 7);
+  assert.equal(patchToCoreSettings(patch).harmonicDistanceFalloff, 2);
 });
 
 test("split bars include the second chord slot in progression conversion", () => {

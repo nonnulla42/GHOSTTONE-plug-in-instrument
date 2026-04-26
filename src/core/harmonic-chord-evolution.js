@@ -74,6 +74,18 @@ function normalizePc(pc) {
   return ((pc % 12) + 12) % 12;
 }
 
+function normalizeDistanceTarget(value, fallback = 1) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return normalizePc(Math.trunc(number));
+}
+
+function normalizeFalloff(value, fallback = 1) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(0, Math.min(6, number));
+}
+
 function octaveNear(midi, target) {
   let result = midi;
   while (result - target > 6) result -= 12;
@@ -95,6 +107,10 @@ function average(values) {
 
 function chordCenter(notes) {
   return average(notes.map((note) => note.midi));
+}
+
+function chordBass(notes) {
+  return notes.length ? Math.min(...notes.map((note) => note.midi)) : 0;
 }
 
 function chordSignature(notes) {
@@ -144,6 +160,32 @@ function pushUnique(candidates, seen, candidate) {
   candidates.push(candidate);
 }
 
+function getSimilarityOptions(options = {}) {
+  const settings = options.settings || options;
+  return {
+    harmonicDistanceTarget: normalizeDistanceTarget(settings.harmonicDistanceTarget, 1),
+    harmonicDistanceFalloff: normalizeFalloff(settings.harmonicDistanceFalloff, 1),
+  };
+}
+
+function targetDistance(rawDistance, target) {
+  const distance = normalizePc(rawDistance);
+  const inverted = distance === 0 ? 0 : 12 - distance;
+  return Math.min(Math.abs(distance - target), Math.abs(inverted - target));
+}
+
+export function getNoteSimilarity(a, b, options = {}) {
+  const { harmonicDistanceTarget, harmonicDistanceFalloff } = getSimilarityOptions(options);
+  const distance = normalizePc(Math.abs(normalizePc(a) - normalizePc(b)));
+  if (distance === 0) return 1;
+  if (harmonicDistanceTarget === 0) return 0;
+
+  const diff = targetDistance(distance, harmonicDistanceTarget);
+  if (diff === 0) return 0.5;
+  if (harmonicDistanceFalloff > 0 && diff <= harmonicDistanceFalloff) return 0.25;
+  return 0;
+}
+
 function buildChordCandidate(root, quality) {
   const pitchClasses = quality.intervals.map((interval) => normalizePc(root + interval));
   return {
@@ -163,23 +205,39 @@ function enumerateChordVocabulary() {
   return candidates;
 }
 
-export function computeChordSimilarity(candidate, current) {
+export function computeChordSimilarityDetails(candidate, current, options = {}) {
   const currentPcs = normalizeNotes(current).map((note) => note.pitchClass);
   const candidatePcs = (candidate.pitchClasses || normalizeNotes(candidate).map((note) => note.pitchClass)).map(normalizePc);
   const used = new Set();
+  let exactMatches = 0;
+  let distanceMatches = 0;
+  let falloffMatches = 0;
 
-  return currentPcs.reduce((sum, pc) => {
+  const totalScore = currentPcs.reduce((sum, pc) => {
     let best = { index: -1, score: 0 };
     candidatePcs.forEach((candidatePc, index) => {
       if (used.has(index)) return;
-      const distance = Math.min(normalizePc(candidatePc - pc), normalizePc(pc - candidatePc));
-      const score = distance === 0 ? 1 : distance === 1 ? 0.5 : 0;
+      const score = getNoteSimilarity(pc, candidatePc, options);
       if (score > best.score) best = { index, score };
     });
 
     if (best.index >= 0) used.add(best.index);
+    if (best.score === 1) exactMatches += 1;
+    if (best.score === 0.5) distanceMatches += 1;
+    if (best.score === 0.25) falloffMatches += 1;
     return sum + best.score;
   }, 0);
+
+  return {
+    exactMatches,
+    distanceMatches,
+    falloffMatches,
+    totalScore,
+  };
+}
+
+export function computeChordSimilarity(candidate, current, options = {}) {
+  return computeChordSimilarityDetails(candidate, current, options).totalScore;
 }
 
 function rootDistanceToCurrent(candidate, current) {
@@ -205,7 +263,8 @@ export function generateCandidates(current, options = {}) {
   enumerateChordVocabulary()
     .map((candidate) => ({
       ...candidate,
-      similarity: computeChordSimilarity(candidate, current),
+      similarity: computeChordSimilarity(candidate, current, { settings }),
+      similarityDetails: computeChordSimilarityDetails(candidate, current, { settings }),
       rootDistance: rootDistanceToCurrent(candidate, current),
     }))
     .filter((candidate) => candidate.similarity >= 0.5)
@@ -285,6 +344,43 @@ function spacingPenalty(voicedNotes) {
   }
 
   return penalty;
+}
+
+export function getRegisterDriftWeight(currentMean, targetMean) {
+  const diff = currentMean - targetMean;
+  if (diff > 0) return 1 - Math.min(diff / 24, 0.6);
+  return 1 + Math.min(Math.abs(diff) / 48, 0.2);
+}
+
+function getHistoricalRegisterCenter(current, options = {}) {
+  const history = Array.isArray(options.history) ? options.history : [];
+  const historyCenters = history
+    .map((state) => normalizeNotes(state))
+    .filter((notes) => notes.length)
+    .map(chordCenter);
+
+  if (!historyCenters.length) return chordCenter(normalizeNotes(current));
+
+  const alpha = 0.28;
+  return historyCenters.slice(-8).reduce((ema, center) => ema + (center - ema) * alpha, historyCenters[0]);
+}
+
+function directionalMovementWeight(movements, settings = {}) {
+  const target = normalizeDistanceTarget(settings.harmonicDistanceTarget, 1);
+  const highTargetCompensation = target >= 4 && target <= 7;
+
+  return movements.reduce((weight, movement) => {
+    if (movement > 0) return weight * 0.85;
+    if (movement < 0) return weight * (highTargetCompensation ? 1.15 : 1.1);
+    return weight;
+  }, 1);
+}
+
+function bassGravityWeight(voicedNotes) {
+  const bassSoftMax = 53;
+  const bass = chordBass(voicedNotes);
+  if (bass <= bassSoftMax) return 1;
+  return Math.max(0.55, 1 - (bass - bassSoftMax) / 22);
 }
 
 /**
@@ -401,13 +497,18 @@ export function scoreCandidate(candidate, current, options = {}) {
   const settings = options.settings || {};
   const profile = MOTION_PROFILES[settings.harmonicMotion || "subtle"] || MOTION_PROFILES.subtle;
   const commonToneCount = countCommonPitchClasses(candidate, current);
-  const similarity = Number.isFinite(candidate.similarity) ? candidate.similarity : computeChordSimilarity(candidate, current);
+  const similarityDetails = candidate.similarityDetails || computeChordSimilarityDetails(candidate, current, options);
+  const similarity = Number.isFinite(candidate.similarity) ? candidate.similarity : similarityDetails.totalScore;
   if (similarity < 0.5) return null;
 
   const voiced = applyVoiceLeading(candidate, current, options);
   const movements = voiced.notes.map((note) => {
     const previous = normalizeNotes(current).find((candidateNote) => candidateNote.voiceId === note.voiceId);
     return Math.abs(note.midi - (previous?.midi ?? note.midi));
+  });
+  const signedMovements = voiced.notes.map((note) => {
+    const previous = normalizeNotes(current).find((candidateNote) => candidateNote.voiceId === note.voiceId);
+    return note.midi - (previous?.midi ?? note.midi);
   });
   const smallMoves = movements.filter((movement) => movement > 0 && movement <= 2).length;
   const largeJumps = movements.filter((movement) => movement > 7).length;
@@ -425,10 +526,14 @@ export function scoreCandidate(candidate, current, options = {}) {
       ? voiced.totalMovement * 0.34
       : -voiced.totalMovement * 0.12;
   const pitchCenterPenalty = computePitchCenterPenalty({ notes: voiced.notes }, current, options);
+  const registerDriftWeight = getRegisterDriftWeight(chordCenter(voiced.notes), getHistoricalRegisterCenter(current, options));
+  const directionWeight = directionalMovementWeight(signedMovements, settings);
+  const bassWeight = bassGravityWeight(voiced.notes);
+  const gravityWeight = registerDriftWeight * directionWeight * bassWeight;
   const repeatPenalty = repetitionPenalty({ notes: voiced.notes }, options);
   const clusterPenalty = duplicatePitchClasses * 8 + spacingPenalty(voiced.notes) * 0.72;
   const jumpPenalty = largeJumps * 16 + voiced.voiceLeadingPenalty;
-  const score =
+  const rawScore =
     3 +
     similarityBonus +
     qualityBonus +
@@ -440,6 +545,7 @@ export function scoreCandidate(candidate, current, options = {}) {
     repeatPenalty -
     clusterPenalty -
     jumpPenalty;
+  const score = rawScore * gravityWeight;
 
   return {
     candidate,
@@ -447,9 +553,14 @@ export function scoreCandidate(candidate, current, options = {}) {
     score: Math.max(0.01, score),
     commonToneCount,
     similarity,
+    similarityDetails,
     similarityWeight,
     totalMovement: voiced.totalMovement,
     pitchCenterPenalty,
+    registerDriftWeight,
+    directionWeight,
+    bassWeight,
+    gravityWeight,
     repetitionPenalty: repeatPenalty,
   };
 }
