@@ -253,30 +253,38 @@ function chooseSemitoneDelta(motionType, role, settings, random) {
   );
 }
 
+function moveSamePitchClassAbove(midi, minimum) {
+  let result = midi;
+  while (result <= minimum) result += 12;
+  return result;
+}
+
 function enforceVoiceOrder(voices, previousState) {
-  return voices
-    .sort((left, right) => left.midi - right.midi)
-    .map((voice, index, all) => {
-      let midi = voice.midi;
-      if (index > 0 && midi <= all[index - 1].midi) {
-        midi = all[index - 1].midi + 2;
-      }
+  const ordered = voices
+    .slice()
+    .sort((left, right) => left.midi - right.midi);
+  const result = [];
 
-      const previousVoice = previousState.voices.find((candidate) => candidate.voiceId === voice.voiceId);
-      if (previousVoice) {
-        midi = octaveNear(midi, previousVoice.midi);
-        if (index > 0 && midi <= all[index - 1].midi) {
-          midi = all[index - 1].midi + 2;
-        }
-      }
+  ordered.forEach((voice) => {
+    let midi = voice.midi;
+    const previousVoice = previousState.voices.find((candidate) => candidate.voiceId === voice.voiceId);
+    if (previousVoice) {
+      midi = octaveNear(midi, previousVoice.midi);
+    }
 
-      return {
-        ...voice,
-        midi,
-        pc: normalizePc(midi),
-        noteName: noteNameFromMidi(midi),
-      };
+    if (result.length && midi <= result[result.length - 1].midi) {
+      midi = moveSamePitchClassAbove(midi, result[result.length - 1].midi);
+    }
+
+    result.push({
+      ...voice,
+      midi,
+      pc: normalizePc(midi),
+      noteName: noteNameFromMidi(midi),
     });
+  });
+
+  return result;
 }
 
 function stabilizeState(voices, rootCandidate, previousState, settings) {
@@ -319,10 +327,13 @@ function stabilizeState(voices, rootCandidate, previousState, settings) {
     if (changedVoices.length === nextVoices.length && nextVoices.length) {
       const anchor = nextVoices.find((voice) => voice.role === "anchor") || nextVoices[0];
       const previousAnchor = previousState.voices.find((voice) => voice.voiceId === anchor.voiceId) || previousState.voices[0];
-      anchor.midi = previousAnchor.midi;
-      anchor.pc = normalizePc(anchor.midi);
-      anchor.changed = false;
-      nextVoices = assignRolesForVoices(nextVoices, rootCandidate);
+      const previousAnchorPc = normalizePc(previousAnchor.midi);
+      if (anchor.pc === previousAnchorPc) {
+        anchor.midi = octaveNear(previousAnchor.midi, anchor.midi);
+        anchor.pc = normalizePc(anchor.midi);
+        anchor.changed = false;
+        nextVoices = assignRolesForVoices(nextVoices, rootCandidate);
+      }
     }
   }
 

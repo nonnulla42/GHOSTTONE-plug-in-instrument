@@ -99,6 +99,26 @@ test("stayMusical prevents total harmonic collapse", () => {
   assert.ok(next.stabilityScore > 0.2);
 });
 
+test("infinite evolution keeps four unique chord tones voiced", () => {
+  const skeleton = [
+    seedSection("Cmaj7", 0, 4),
+    seedSection("Cmaj7", 4, 4),
+    seedSection("Cmaj7", 8, 4),
+    seedSection("Cmaj7", 12, 4),
+  ];
+  const sections = buildInfiniteSectionSequence(skeleton, {
+    harmonicMotion: "subtle",
+    harmonicDistanceTarget: 4,
+    harmonyLock: 0.68,
+    stayMusical: true,
+  }, 808, 16, makeRandom);
+
+  sections.forEach((section) => {
+    assert.equal(section.notes.length, 4);
+    assert.equal(new Set(section.notes.map((note) => note.pc)).size, 4);
+  });
+});
+
 test("buildInfiniteSections creates a finite evolving window from a seed progression skeleton", () => {
   const skeleton = [
     seedSection("Am9", 0, 4),

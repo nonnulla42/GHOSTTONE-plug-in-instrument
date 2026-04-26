@@ -306,6 +306,27 @@ function shuffleNotes(notes, seed, amount = 1) {
   return shuffled;
 }
 
+function preserveUniqueArpNotes(order, sourceNotes) {
+  const used = new Set();
+  const unique = [];
+
+  order.forEach((note) => {
+    const key = normalizePc(note.pc ?? note.midi);
+    if (used.has(key)) return;
+    used.add(key);
+    unique.push(note);
+  });
+
+  sourceNotes.forEach((note) => {
+    const key = normalizePc(note.pc ?? note.midi);
+    if (used.has(key)) return;
+    used.add(key);
+    unique.push(note);
+  });
+
+  return unique.slice(0, sourceNotes.length);
+}
+
 function buildArpOrder(notes, section, settings, previousSection, seed) {
   const ascending = [...notes].sort((a, b) => a.midi - b.midi);
   const descending = [...ascending].reverse();
@@ -344,6 +365,7 @@ function buildArpOrder(notes, section, settings, previousSection, seed) {
       const target = order[index % order.length];
       return order.find((note) => note.degree === previousNote.degree) || target;
     });
+    order = preserveUniqueArpNotes(order, ascending);
   }
 
   const organicSeed = seed + Math.round(section.startBeat * 191) + 23;
@@ -546,6 +568,23 @@ function chooseMotionNote(notes, previousEvent, motionType, carriedFromPrevious)
   return (leaps[0] || candidates.sort((left, right) => right.distance - left.distance)[0])?.note || notes[0];
 }
 
+function keepAssignedPitchClass(note, previousEvent, motionType) {
+  if (!previousEvent) return note;
+
+  let midi = octaveNear(note.midi, previousEvent.midi);
+  if (motionType === "leap" && Math.abs(midi - previousEvent.midi) < 5) {
+    const up = midi + 12;
+    const down = midi - 12;
+    midi = Math.abs(up - previousEvent.midi) >= Math.abs(down - previousEvent.midi) ? up : down;
+  }
+
+  return {
+    ...note,
+    midi,
+    pc: normalizePc(midi),
+  };
+}
+
 function addRoleBasedEvent(events, note, sectionIndex, voiceId, startBeat, durationBeats, rand, settings, prevChord, chord, nextChord, details = {}) {
   const role = note.harmonicRole || assignHarmonicRole(note);
   const cents = generateRoleMicroOffsetCents(role, rand, {
@@ -635,7 +674,9 @@ function generateRoleBasedEvents(events, sections, settings, normalizedSeed) {
         const role = baseNote.harmonicRole;
         const motionType = pickMotionType(role, rand);
         const carriedFromPrevious = Boolean(previousEvent) && shouldCarryForward(role, rand, { sharedWithPrevious, sharedWithNext });
-        const selected = previousEvent ? chooseMotionNote(notes, previousEvent, motionType, carriedFromPrevious) : baseNote;
+        const selected = settings.generatorMode === "infinite"
+          ? keepAssignedPitchClass(baseNote, previousEvent, motionType)
+          : previousEvent ? chooseMotionNote(notes, previousEvent, motionType, carriedFromPrevious) : baseNote;
         const durationBeats = resolveDurationBeats(role, settings.mode, rand, {
           sectionBeats,
           remainingBeats: sectionBeats,
@@ -666,7 +707,9 @@ function generateRoleBasedEvents(events, sections, settings, normalizedSeed) {
         const sharedWithNext = Boolean(nextChord?.notes.some((candidate) => candidate.pc === note.pc));
         const motionType = pickMotionType(role, rand);
         const carriedFromPrevious = Boolean(previousEvent) && shouldCarryForward(role, rand, { sharedWithPrevious, sharedWithNext });
-        const selected = previousEvent ? chooseMotionNote(arpNotes, previousEvent, motionType, carriedFromPrevious) : note;
+        const selected = settings.generatorMode === "infinite"
+          ? keepAssignedPitchClass(note, previousEvent, motionType)
+          : previousEvent ? chooseMotionNote(arpNotes, previousEvent, motionType, carriedFromPrevious) : note;
         const durationBeats = resolveDurationBeats(role, "arp", rand, {
           sectionBeats,
           remainingBeats: Math.max(0.25, sectionBeats - offsets[step]),

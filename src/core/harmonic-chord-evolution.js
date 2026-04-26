@@ -6,6 +6,13 @@ const VOICE_RANGES = Object.freeze([
   Object.freeze({ min: 57, max: 76, center: 67 }),
 ]);
 
+const ROLE_WEIGHTS = Object.freeze({
+  anchor: 0.8,
+  support: 0.5,
+  tension: 0.5,
+  color: 0.2,
+});
+
 const MOTION_PROFILES = Object.freeze({
   static: Object.freeze({
     similarityTarget: 3.05,
@@ -101,6 +108,56 @@ function midiInRangeForVoice(pc, range, target) {
   return midi;
 }
 
+function midiCandidatesForPitchClass(pc, range) {
+  const normalized = normalizePc(pc);
+  const candidates = [];
+  let midi = normalized;
+  while (midi < range.min) midi += 12;
+  while (midi <= range.max) {
+    candidates.push(midi);
+    midi += 12;
+  }
+  return candidates;
+}
+
+function rankedChordMidiTargets(pitchClasses, range, target, preferredPc = null) {
+  const preferred = preferredPc == null ? null : normalizePc(preferredPc);
+  const candidates = pitchClasses
+    .flatMap((pc) => midiCandidatesForPitchClass(pc, range))
+    .map((midi) => ({
+      midi,
+      pitchClass: normalizePc(midi),
+      distance: Math.abs(midi - target),
+      preferredDistance: preferred == null ? 0 : (normalizePc(midi) === preferred ? 0 : 1),
+      centerDistance: Math.abs(midi - range.center),
+    }))
+    .sort((left, right) =>
+      left.distance - right.distance ||
+      left.preferredDistance - right.preferredDistance ||
+      left.centerDistance - right.centerDistance ||
+      left.midi - right.midi);
+
+  if (candidates.length) return candidates;
+
+  const fallbackPc = normalizePc(preferred ?? pitchClasses[0] ?? 0);
+  const fallbackMidi = midiInRangeForVoice(fallbackPc, range, target);
+  return [{
+    midi: fallbackMidi,
+    pitchClass: normalizePc(fallbackMidi),
+    distance: Math.abs(fallbackMidi - target),
+    preferredDistance: 0,
+    centerDistance: Math.abs(fallbackMidi - range.center),
+  }];
+}
+
+function nearestChordMidi(pitchClasses, range, target, preferredPc = null) {
+  return rankedChordMidiTargets(pitchClasses, range, target, preferredPc)[0].midi;
+}
+
+function roleWeight(role) {
+  return ROLE_WEIGHTS[role] ?? ROLE_WEIGHTS.color;
+}
+
 function average(values) {
   return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
 }
@@ -151,6 +208,19 @@ function uniqueCandidate(pitchClasses, kind) {
 
 function candidateKey(candidate) {
   return candidate.pitchClasses.join(":");
+}
+
+function hasFourUniquePitchClasses(candidate) {
+  const pitchClasses = (candidate.pitchClasses || []).map(normalizePc);
+  return pitchClasses.length === 4 && new Set(pitchClasses).size === 4;
+}
+
+function usesAllPitchClassesExactlyOnce(voicedNotes, pitchClasses) {
+  const required = pitchClasses.map(normalizePc);
+  const voiced = voicedNotes.map((note) => normalizePc(note.pitchClass ?? note.midi));
+  if (voiced.length !== required.length) return false;
+  if (new Set(voiced).size !== new Set(required).size) return false;
+  return required.every((pc) => voiced.includes(pc));
 }
 
 function pushUnique(candidates, seen, candidate) {
@@ -268,6 +338,7 @@ export function generateCandidates(current, options = {}) {
       rootDistance: rootDistanceToCurrent(candidate, current),
     }))
     .filter((candidate) => candidate.similarity >= 0.5)
+    .filter(hasFourUniquePitchClasses)
     .sort((left, right) => {
       const profile = MOTION_PROFILES[settings.harmonicMotion || "subtle"] || MOTION_PROFILES.subtle;
       const leftDistance = Math.abs(left.similarity - profile.similarityTarget) + left.rootDistance * 0.035;
@@ -383,6 +454,41 @@ function bassGravityWeight(voicedNotes) {
   return Math.max(0.55, 1 - (bass - bassSoftMax) / 22);
 }
 
+function shouldProtectInversionContinuity({ candidate, nearestTarget, previous, previousNotes, roleTarget }) {
+  const role = previous.role || "color";
+  const wasBass = previous.midi <= chordBass(previousNotes) + 0.001;
+  if (role !== "anchor" && !wasBass) return false;
+
+  const root = Number.isFinite(candidate.root) ? normalizePc(candidate.root) : null;
+  const nearestPc = normalizePc(nearestTarget);
+  const rolePc = normalizePc(roleTarget);
+  const previousPc = normalizePc(previous.pitchClass ?? previous.midi);
+  const commonToneAvailable = candidate.pitchClasses.some((pc) => normalizePc(pc) === previousPc);
+
+  if (commonToneAvailable && nearestPc !== previousPc && rolePc === previousPc) return true;
+  if (root != null && nearestPc === root && rolePc !== root && Math.abs(roleTarget - previous.midi) <= 7) return true;
+
+  return false;
+}
+
+function blendedVoiceTarget({ candidate, pitchClasses, previous, previousNotes, range, rolePc }) {
+  const continuityTarget = previous.midi * 0.72 + range.center * 0.28;
+  const roleTarget = midiInRangeForVoice(rolePc, range, continuityTarget);
+  const nearestTarget = nearestChordMidi(pitchClasses, range, previous.midi, previous.pitchClass);
+  let weight = roleWeight(previous.role);
+
+  if (Math.abs(roleTarget - previous.midi) > 7) {
+    weight = Math.min(weight, 0.18);
+  }
+
+  if (shouldProtectInversionContinuity({ candidate, nearestTarget, previous, previousNotes, roleTarget })) {
+    weight = Math.max(weight, 0.72);
+  }
+
+  const blendedTarget = roleTarget * weight + nearestTarget * (1 - weight);
+  return midiInRangeForVoice(rolePc, range, blendedTarget);
+}
+
 /**
  * Finds the closest assignment between candidate pitch classes and previous
  * voices. This keeps voice identities continuous instead of jumping to a new
@@ -401,11 +507,17 @@ export function applyVoiceLeading(candidate, current, options = {}) {
     const voicedNotes = permutation.map((pc, index) => {
       const previous = previousNotes[index] || previousNotes[previousNotes.length - 1];
       const range = VOICE_RANGES[index] || VOICE_RANGES[VOICE_RANGES.length - 1];
-      const target = previous.midi * 0.72 + range.center * 0.28;
-      const midi = midiInRangeForVoice(pc, range, target);
+      const midi = blendedVoiceTarget({
+        candidate,
+        pitchClasses,
+        previous,
+        previousNotes,
+        range,
+        rolePc: pc,
+      });
       const movement = Math.abs(midi - previous.midi);
       return {
-        pitchClass: pc,
+        pitchClass: normalizePc(midi),
         midi,
         voiceId: previous.voiceId ?? index,
         role: previous.role,
@@ -413,7 +525,14 @@ export function applyVoiceLeading(candidate, current, options = {}) {
       };
     });
 
+    if (!usesAllPitchClassesExactlyOnce(voicedNotes, pitchClasses)) {
+      return;
+    }
+
     const totalMovement = voicedNotes.reduce((sum, note) => sum + note.movement, 0);
+    const voicedPitchClasses = new Set(voicedNotes.map((note) => normalizePc(note.midi)));
+    const missingPitchClasses = new Set(pitchClasses).size - voicedPitchClasses.size;
+    const harmonicIdentityPenalty = Math.max(0, missingPitchClasses) * 10;
     const largeJumpPenalty = voicedNotes.reduce((sum, note) => {
       if (note.movement <= 7) return sum;
       return sum + (note.movement - 7) * (note.movement - 7) * 1.2;
@@ -425,7 +544,7 @@ export function applyVoiceLeading(candidate, current, options = {}) {
       const centerDistance = Math.abs(note.midi - range.center);
       return sum + (below + above) * 8 + centerDistance * 0.08;
     }, 0);
-    const penalty = largeJumpPenalty + crossingPenalty(previousNotes, voicedNotes) + spacingPenalty(voicedNotes) + rangePenalty;
+    const penalty = largeJumpPenalty + crossingPenalty(previousNotes, voicedNotes) + spacingPenalty(voicedNotes) + rangePenalty + harmonicIdentityPenalty;
     const cost = totalMovement + penalty;
 
     if (!best || cost < best.cost) {

@@ -106,6 +106,36 @@ test("applyVoiceLeading assigns candidate tones to nearby previous voices", () =
   })) <= 7);
 });
 
+test("applyVoiceLeading preserves anchor inversions instead of forcing root position", () => {
+  const current = {
+    notes: [
+      { pitchClass: 9, midi: 45, voiceId: 0, role: "anchor" },
+      { pitchClass: 0, midi: 48, voiceId: 1, role: "color" },
+      { pitchClass: 5, midi: 53, voiceId: 2, role: "support" },
+      { pitchClass: 4, midi: 64, voiceId: 3, role: "color" },
+    ],
+  };
+  const voiced = applyVoiceLeading({ root: 5, pitchClasses: [5, 9, 0, 4] }, current, {
+    settings: { harmonyLock: 0.6 },
+  });
+  const anchor = voiced.notes.find((note) => note.voiceId === 0);
+
+  assert.equal(anchor.pitchClass, 9);
+  assert.equal(anchor.midi, 45);
+});
+
+test("applyVoiceLeading keeps all four chord tones voiced", () => {
+  const current = currentChord();
+  const candidate = { pitchClasses: [9, 10, 0, 5] };
+  const voiced = applyVoiceLeading(candidate, current, {
+    settings: { harmonyLock: 0.5 },
+  });
+  const voicedPitchClasses = new Set(voiced.notes.map((note) => note.pitchClass));
+
+  assert.equal(voicedPitchClasses.size, 4);
+  candidate.pitchClasses.forEach((pc) => assert.ok(voicedPitchClasses.has(pc)));
+});
+
 test("computePitchCenterPenalty discourages upward register drift", () => {
   const current = currentChord();
   const nearby = {
@@ -139,6 +169,7 @@ test("generateNextChord is deterministic and preserves voice continuity", () => 
 
   assert.deepEqual(second, first);
   assert.equal(first.notes.length, 4);
+  assert.equal(new Set(first.notes.map((note) => note.pitchClass)).size, 4);
   assert.ok(countCommonPitchClasses(first, current) >= 1);
   assert.ok(movementSum(current, first) > 0);
 });

@@ -16,6 +16,10 @@ const progression = [
   { split: false, slots: [{ chord: "Gsus4", voicingSeed: 0, arpSeed: 0 }] },
 ];
 
+function normalizePc(pc) {
+  return ((pc % 12) + 12) % 12;
+}
+
 test("parseChord returns chord tones with roles", () => {
   const chord = parseChord("Am9");
 
@@ -165,6 +169,32 @@ test("infinite generator evolves sections deterministically and preserves anchor
   assert.deepEqual(second, first);
   assert.ok(first.sections.every((section) => section.notes.some((note) => note.harmonicRole === "anchor")));
   assert.ok(first.sections.slice(1).some((section) => (section.state?.movedVoices || 0) > 0));
+});
+
+test("infinite arp events preserve each section chord tone", () => {
+  const cmaj7Progression = Array.from({ length: 4 }, () => ({
+    split: false,
+    slots: [{ chord: "Cmaj7", voicingSeed: 0, arpSeed: 0 }],
+  }));
+  const result = generatePattern({
+    generatorMode: "infinite",
+    harmonicMotion: "subtle",
+    harmonicDistanceTarget: 4,
+    mode: "arp",
+    arpDensity: 0.7,
+    harmonyLock: 0.68,
+    stayMusical: true,
+  }, cmaj7Progression, 13013);
+
+  result.sections.forEach((section, sectionIndex) => {
+    const sectionPcs = new Set(section.notes.map((note) => note.pc));
+    const eventPcs = new Set(result.events
+      .filter((event) => event.sectionIndex === sectionIndex)
+      .map((event) => normalizePc(event.midi)));
+
+    assert.equal(sectionPcs.size, 4);
+    sectionPcs.forEach((pc) => assert.ok(eventPcs.has(pc)));
+  });
 });
 
 function range(values) {
