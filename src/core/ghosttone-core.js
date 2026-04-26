@@ -568,15 +568,52 @@ function chooseMotionNote(notes, previousEvent, motionType, carriedFromPrevious)
   return (leaps[0] || candidates.sort((left, right) => right.distance - left.distance)[0])?.note || notes[0];
 }
 
+const EVENT_SOFT_CEILING = 84;
+const EVENT_HARD_CEILING = 92;
+const EVENT_LOW_FLOOR = 36;
+const EVENT_HIGH_MEMORY = 78;
+
+function scoreAssignedEventMidi(midi, previousMidi, motionType) {
+  const distance = Math.abs(midi - previousMidi);
+  let score = distance;
+
+  if (midi > EVENT_SOFT_CEILING) score += (midi - EVENT_SOFT_CEILING) * 2.4;
+  if (midi > EVENT_HARD_CEILING) score += (midi - EVENT_HARD_CEILING) * 5.2;
+  if (midi < EVENT_LOW_FLOOR) score += (EVENT_LOW_FLOOR - midi) * 1.2;
+
+  if (previousMidi > EVENT_HIGH_MEMORY && midi > previousMidi) {
+    score += (midi - previousMidi) * 2.2 + (previousMidi - EVENT_HIGH_MEMORY) * 0.55;
+  }
+
+  if (previousMidi > EVENT_SOFT_CEILING && midi >= EVENT_SOFT_CEILING) {
+    score += 8;
+  }
+
+  if (previousMidi > EVENT_HIGH_MEMORY && midi < previousMidi) {
+    score -= Math.min(5, (previousMidi - EVENT_HIGH_MEMORY) * 0.55);
+  }
+
+  if (motionType === "leap") {
+    if (distance > 0 && distance < 5) score += previousMidi > EVENT_HIGH_MEMORY ? 4.5 : 2.5;
+    if (distance > 12) score += (distance - 12) * 1.6;
+  } else if (distance > 12) {
+    score += (distance - 12) * 3;
+  }
+
+  return score;
+}
+
 function keepAssignedPitchClass(note, previousEvent, motionType) {
   if (!previousEvent) return note;
 
-  let midi = octaveNear(note.midi, previousEvent.midi);
-  if (motionType === "leap" && Math.abs(midi - previousEvent.midi) < 5) {
-    const up = midi + 12;
-    const down = midi - 12;
-    midi = Math.abs(up - previousEvent.midi) >= Math.abs(down - previousEvent.midi) ? up : down;
-  }
+  const nearest = octaveNear(note.midi, previousEvent.midi);
+  const candidates = [...new Set([nearest - 24, nearest - 12, nearest, nearest + 12, nearest + 24])];
+  const midi = candidates
+    .map((candidate) => ({
+      midi: candidate,
+      score: scoreAssignedEventMidi(candidate, previousEvent.midi, motionType),
+    }))
+    .sort((left, right) => left.score - right.score || Math.abs(left.midi - previousEvent.midi) - Math.abs(right.midi - previousEvent.midi))[0]?.midi ?? nearest;
 
   return {
     ...note,
@@ -699,8 +736,8 @@ function generateRoleBasedEvents(events, sections, settings, normalizedSeed) {
       const arpNotes = buildArpOrder(notes, section, settings, previousSection, normalizedSeed);
       const offsets = getArpStepOffsets(sectionBeats, settings);
       for (let step = 0; step < offsets.length; step += 1) {
-        const voiceId = step % arpNotes.length;
-        const note = arpNotes[voiceId];
+        const note = arpNotes[step % arpNotes.length];
+        const voiceId = note.voiceId ?? (step % arpNotes.length);
         const role = note.harmonicRole;
         const previousEvent = previousVoiceEvents.get(voiceId) || null;
         const sharedWithPrevious = Boolean(prevChord?.notes.some((candidate) => candidate.pc === note.pc));

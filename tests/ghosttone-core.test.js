@@ -197,6 +197,27 @@ test("infinite arp events preserve each section chord tone", () => {
   });
 });
 
+test("infinite arp events avoid upward register ratcheting", () => {
+  const cmaj7Progression = Array.from({ length: 4 }, () => ({
+    split: false,
+    slots: [{ chord: "Cmaj7", voicingSeed: 0, arpSeed: 0 }],
+  }));
+  const result = generatePattern({
+    generatorMode: "infinite",
+    harmonicMotion: "subtle",
+    harmonicDistanceTarget: 9,
+    mode: "arp",
+    arpDensity: 0.75,
+    harmonyLock: 0.68,
+    stayMusical: true,
+  }, cmaj7Progression, 13013);
+  const eventMidis = result.events.map((event) => event.midi);
+  const sectionVoiceIds = new Set(result.sections.flatMap((section) => section.notes.map((note) => note.voiceId)));
+
+  assert.ok(Math.max(...eventMidis) <= 84);
+  assert.ok(result.events.every((event) => sectionVoiceIds.has(event.voiceId)));
+});
+
 function range(values) {
   return Math.max(...values) - Math.min(...values);
 }
