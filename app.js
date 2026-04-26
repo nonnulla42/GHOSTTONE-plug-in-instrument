@@ -14,7 +14,7 @@ import {
   setPatchSlot,
 } from "./src/state/patch-state.js";
 import { WebAudioAdapter } from "./src/web/audio-adapter.js";
-import { exportMidi } from "./src/web/midi-export-adapter.js";
+import { exportMidi, exportInfiniteMidi } from "./src/web/midi-export-adapter.js";
 import { exportWav } from "./src/web/wav-export-adapter.js";
 import { applyPatch, capturePatch, updateCompareUi } from "./src/web/patch-adapter.js";
 import { findPreset } from "./src/web/presets.js";
@@ -276,6 +276,12 @@ function bindEvents() {
     updateActivePatchFromUi({ restartAudio: false });
     const patch = activePatch();
     exportMidi(state.pattern, patch.bpm, patch.sound);
+  });
+
+  els.exportInfiniteButton.addEventListener("click", () => {
+    updateActivePatchFromUi({ restartAudio: false });
+    const patch = activePatch();
+    exportInfiniteMidi(state.pattern, patch.bpm, patch.sound);
   });
 
   els.exportWavButton.addEventListener("click", () => {

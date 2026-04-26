@@ -3,6 +3,7 @@ export function getElements(root = document) {
     playButton: root.querySelector("#playButton"),
     generateButton: root.querySelector("#generateButton"),
     exportButton: root.querySelector("#exportButton"),
+    exportInfiniteButton: root.querySelector("#exportInfiniteButton"),
     exportWavButton: root.querySelector("#exportWavButton"),
     presetSelect: root.querySelector("#presetSelect"),
     compareButtons: [...root.querySelectorAll(".compare-button")],
