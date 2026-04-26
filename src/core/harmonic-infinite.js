@@ -373,7 +373,9 @@ export function evolveHarmonicState(previousState, options = {}) {
   });
 
   const ordered = enforceVoiceOrder(transformed, previousState);
-  const rootCandidate = chooseRootCandidate(ordered, previousState, options.targetRootPc, { ...settings, history }, profile, random);
+  const rootCandidate = Number.isFinite(nextChord.root)
+    ? normalizePc(nextChord.root)
+    : chooseRootCandidate(ordered, previousState, options.targetRootPc, { ...settings, history }, profile, random);
   const stabilized = stabilizeState(ordered, rootCandidate, previousState, settings);
 
   return evaluateHarmonicState({

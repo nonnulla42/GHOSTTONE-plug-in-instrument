@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   applyVoiceLeading,
+  computeChordSimilarity,
   computePitchCenterPenalty,
   countCommonPitchClasses,
   generateCandidates,
@@ -37,7 +38,7 @@ function movementSum(previous, next) {
   }, 0);
 }
 
-test("generateCandidates mutates the current chord locally", () => {
+test("generateCandidates returns valid chord candidates with harmonic similarity", () => {
   const current = currentChord();
   const candidates = generateCandidates(current, {
     random: makeRandom(1001),
@@ -45,13 +46,21 @@ test("generateCandidates mutates the current chord locally", () => {
   });
 
   assert.ok(candidates.length >= 12);
-  assert.ok(candidates.every((candidate) => countCommonPitchClasses(candidate, current) >= 1));
+  assert.ok(candidates.every((candidate) => candidate.kind === "valid-chord"));
+  assert.ok(candidates.every((candidate) => computeChordSimilarity(candidate, current) >= 0.5));
   assert.ok(candidates.every((candidate) => candidate.pitchClasses.length === 4));
 });
 
-test("scoreCandidate rejects candidates with zero common tones", () => {
+test("computeChordSimilarity counts exact and semitone relationships", () => {
   const current = currentChord();
-  const unrelated = { pitchClasses: [1, 2, 5, 8] };
+  const related = { pitchClasses: [0, 5, 8, 10] };
+
+  assert.equal(computeChordSimilarity(related, current), 2.5);
+});
+
+test("scoreCandidate rejects candidates with no harmonic similarity", () => {
+  const current = currentChord();
+  const unrelated = { pitchClasses: [2, 2, 9, 9] };
 
   assert.equal(scoreCandidate(unrelated, current, {
     random: makeRandom(1002),
@@ -125,4 +134,3 @@ test("recent chord memory lowers the score of repeated candidates", () => {
 
   assert.ok(withHistory.score < withoutHistory.score);
 });
-

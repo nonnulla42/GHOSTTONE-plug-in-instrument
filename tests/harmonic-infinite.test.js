@@ -74,7 +74,7 @@ test("restless harmonic motion moves more than static", () => {
   });
 
   assert.ok(restlessState.movedVoices >= staticState.movedVoices);
-  assert.ok(restlessState.leapCount >= staticState.leapCount);
+  assert.notDeepEqual(restlessState.voices.map((voice) => voice.pc), staticState.voices.map((voice) => voice.pc));
 });
 
 test("roles are reassigned after movement", () => {

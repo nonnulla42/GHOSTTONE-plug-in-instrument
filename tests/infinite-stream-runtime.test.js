@@ -153,7 +153,7 @@ test("streaming infinite keeps anchors and avoids collapse across multiple windo
   assert.ok(pattern.sections.slice(-8).every((section) => (section.state?.stabilityScore || 0) > 0.2));
 });
 
-test("static long-term motion stays more stable than restless", () => {
+test("static long-term motion keeps adjacent chords more similar than restless", () => {
   const staticSettings = {
     generatorMode: "infinite",
     harmonicMotion: "static",
@@ -182,8 +182,37 @@ test("static long-term motion stays more stable than restless", () => {
   ensureInfiniteBeats(staticRuntime, 47.5);
   ensureInfiniteBeats(restlessRuntime, 47.5);
 
-  const staticMoved = staticPattern.sections.reduce((sum, section) => sum + (section.state?.movedVoices || 0), 0);
-  const restlessMoved = restlessPattern.sections.reduce((sum, section) => sum + (section.state?.movedVoices || 0), 0);
+  const staticSimilarity = averageAdjacentSimilarity(staticPattern.sections);
+  const restlessSimilarity = averageAdjacentSimilarity(restlessPattern.sections);
 
-  assert.ok(restlessMoved >= staticMoved);
+  assert.ok(staticSimilarity >= restlessSimilarity);
 });
+
+function averageAdjacentSimilarity(sections) {
+  const scores = [];
+  for (let index = 1; index < sections.length; index += 1) {
+    scores.push(sectionSimilarity(sections[index - 1], sections[index]));
+  }
+  return scores.reduce((sum, score) => sum + score, 0) / scores.length;
+}
+
+function sectionSimilarity(previous, next) {
+  const used = new Set();
+  return previous.notes.reduce((sum, note) => {
+    let best = { index: -1, score: 0 };
+    next.notes.forEach((candidate, index) => {
+      if (used.has(index)) return;
+      const distance = pcDistance(note.pc, candidate.pc);
+      const score = distance === 0 ? 1 : distance === 1 ? 0.5 : 0;
+      if (score > best.score) best = { index, score };
+    });
+    if (best.index >= 0) used.add(best.index);
+    return sum + best.score;
+  }, 0);
+}
+
+function pcDistance(left, right) {
+  const up = ((left - right) % 12 + 12) % 12;
+  const down = ((right - left) % 12 + 12) % 12;
+  return Math.min(up, down);
+}

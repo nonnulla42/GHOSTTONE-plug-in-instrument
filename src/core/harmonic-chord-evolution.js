@@ -1,8 +1,16 @@
 const DEFAULT_IDEAL_CENTER = Object.freeze({ min: 48, max: 72 });
+const VOICE_RANGES = Object.freeze([
+  Object.freeze({ min: 42, max: 55, center: 48 }),
+  Object.freeze({ min: 48, max: 62, center: 55 }),
+  Object.freeze({ min: 53, max: 69, center: 60 }),
+  Object.freeze({ min: 57, max: 76, center: 67 }),
+]);
 
 const MOTION_PROFILES = Object.freeze({
   static: Object.freeze({
-    commonToneWeights: Object.freeze({ 3: 1.45, 2: 0.64, 1: 0.14 }),
+    similarityTarget: 3.05,
+    similarityFloor: 2,
+    similarityWidth: 0.55,
     movementWeight: 1.42,
     centerWeight: 1.55,
     upwardDriftAllowance: 0.4,
@@ -10,7 +18,9 @@ const MOTION_PROFILES = Object.freeze({
     restlessBias: 0,
   }),
   subtle: Object.freeze({
-    commonToneWeights: Object.freeze({ 3: 1.22, 2: 0.86, 1: 0.24 }),
+    similarityTarget: 2.25,
+    similarityFloor: 2,
+    similarityWidth: 0.62,
     movementWeight: 1.18,
     centerWeight: 1.24,
     upwardDriftAllowance: 0.9,
@@ -18,7 +28,9 @@ const MOTION_PROFILES = Object.freeze({
     restlessBias: 0.16,
   }),
   evolving: Object.freeze({
-    commonToneWeights: Object.freeze({ 3: 0.92, 2: 1.08, 1: 0.48 }),
+    similarityTarget: 1.85,
+    similarityFloor: 1,
+    similarityWidth: 0.82,
     movementWeight: 0.92,
     centerWeight: 1.0,
     upwardDriftAllowance: 1.5,
@@ -26,7 +38,9 @@ const MOTION_PROFILES = Object.freeze({
     restlessBias: 0.36,
   }),
   restless: Object.freeze({
-    commonToneWeights: Object.freeze({ 3: 0.58, 2: 1.08, 1: 0.88 }),
+    similarityTarget: 1.05,
+    similarityFloor: 0.5,
+    similarityWidth: 0.78,
     movementWeight: 0.68,
     centerWeight: 0.82,
     upwardDriftAllowance: 2.2,
@@ -34,6 +48,23 @@ const MOTION_PROFILES = Object.freeze({
     restlessBias: 0.62,
   }),
 });
+
+const CHORD_QUALITIES = Object.freeze([
+  Object.freeze({ name: "maj7", intervals: Object.freeze([0, 4, 7, 11]), weight: 1 }),
+  Object.freeze({ name: "7", intervals: Object.freeze([0, 4, 7, 10]), weight: 1.05 }),
+  Object.freeze({ name: "6", intervals: Object.freeze([0, 4, 7, 9]), weight: 0.88 }),
+  Object.freeze({ name: "add9", intervals: Object.freeze([0, 4, 7, 14]), weight: 1.08 }),
+  Object.freeze({ name: "m7", intervals: Object.freeze([0, 3, 7, 10]), weight: 1.05 }),
+  Object.freeze({ name: "mMaj7", intervals: Object.freeze([0, 3, 7, 11]), weight: 0.48 }),
+  Object.freeze({ name: "m6", intervals: Object.freeze([0, 3, 7, 9]), weight: 0.72 }),
+  Object.freeze({ name: "m9", intervals: Object.freeze([0, 3, 7, 14]), weight: 1.02 }),
+  Object.freeze({ name: "sus4", intervals: Object.freeze([0, 5, 7, 10]), weight: 0.84 }),
+  Object.freeze({ name: "sus2", intervals: Object.freeze([0, 2, 7, 10]), weight: 0.72 }),
+  Object.freeze({ name: "dim7", intervals: Object.freeze([0, 3, 6, 9]), weight: 0.42 }),
+  Object.freeze({ name: "m7b5", intervals: Object.freeze([0, 3, 6, 10]), weight: 0.58 }),
+  Object.freeze({ name: "aug7", intervals: Object.freeze([0, 4, 8, 10]), weight: 0.34 }),
+  Object.freeze({ name: "maj7#11", intervals: Object.freeze([0, 4, 11, 18]), weight: 0.5 }),
+]);
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -48,6 +79,14 @@ function octaveNear(midi, target) {
   while (result - target > 6) result -= 12;
   while (target - result > 6) result += 12;
   return result;
+}
+
+function midiInRangeForVoice(pc, range, target) {
+  let midi = octaveNear(48 + pc, target);
+  while (midi < range.min) midi += 12;
+  while (midi > range.max) midi -= 12;
+  if (midi < range.min) midi = octaveNear(48 + pc, range.center);
+  return midi;
 }
 
 function average(values) {
@@ -105,98 +144,85 @@ function pushUnique(candidates, seen, candidate) {
   candidates.push(candidate);
 }
 
-function randomSign(random) {
-  return random() < 0.5 ? -1 : 1;
+function buildChordCandidate(root, quality) {
+  const pitchClasses = quality.intervals.map((interval) => normalizePc(root + interval));
+  return {
+    kind: "valid-chord",
+    root: normalizePc(root),
+    quality: quality.name,
+    qualityWeight: quality.weight,
+    pitchClasses,
+  };
 }
 
-function roleDeltaEntries(role, motionMode) {
-  const restlessScale = motionMode === "restless" ? 1.35 : motionMode === "evolving" ? 1.12 : motionMode === "static" ? 0.62 : 0.88;
-  if (role === "anchor") {
-    return [
-      { value: -2, weight: 0.08 * restlessScale },
-      { value: -1, weight: 0.26 },
-      { value: 1, weight: 0.26 },
-      { value: 2, weight: 0.08 * restlessScale },
-    ];
+function enumerateChordVocabulary() {
+  const candidates = [];
+  for (let root = 0; root < 12; root += 1) {
+    CHORD_QUALITIES.forEach((quality) => candidates.push(buildChordCandidate(root, quality)));
   }
-  if (role === "tension") {
-    return [
-      { value: -2, weight: 0.28 * restlessScale },
-      { value: -1, weight: 0.34 },
-      { value: 1, weight: 0.34 },
-      { value: 2, weight: 0.28 * restlessScale },
-      { value: -3, weight: 0.08 * restlessScale },
-      { value: 3, weight: 0.08 * restlessScale },
-    ];
-  }
-  return [
-    { value: -2, weight: 0.18 * restlessScale },
-    { value: -1, weight: 0.36 },
-    { value: 1, weight: 0.36 },
-    { value: 2, weight: 0.18 * restlessScale },
-  ];
+  return candidates;
 }
 
-function pickLocalDelta(note, settings, random) {
-  const motionMode = settings?.harmonicMotion || "subtle";
-  const picked = weightedChoice(roleDeltaEntries(note.role, motionMode), random);
-  return picked ?? randomSign(random);
+export function computeChordSimilarity(candidate, current) {
+  const currentPcs = normalizeNotes(current).map((note) => note.pitchClass);
+  const candidatePcs = (candidate.pitchClasses || normalizeNotes(candidate).map((note) => note.pitchClass)).map(normalizePc);
+  const used = new Set();
+
+  return currentPcs.reduce((sum, pc) => {
+    let best = { index: -1, score: 0 };
+    candidatePcs.forEach((candidatePc, index) => {
+      if (used.has(index)) return;
+      const distance = Math.min(normalizePc(candidatePc - pc), normalizePc(pc - candidatePc));
+      const score = distance === 0 ? 1 : distance === 1 ? 0.5 : 0;
+      if (score > best.score) best = { index, score };
+    });
+
+    if (best.index >= 0) used.add(best.index);
+    return sum + best.score;
+  }, 0);
 }
 
-function movedPitchClasses(notes, moves, settings, random) {
-  const pitchClasses = notes.map((note) => note.pitchClass);
-  moves.forEach((voiceIndex) => {
-    pitchClasses[voiceIndex] = normalizePc(pitchClasses[voiceIndex] + pickLocalDelta(notes[voiceIndex], settings, random));
-  });
-  return pitchClasses;
+function rootDistanceToCurrent(candidate, current) {
+  const currentNotes = normalizeNotes(current);
+  const bassPc = currentNotes[0]?.pitchClass ?? candidate.root ?? 0;
+  const root = candidate.root ?? candidate.pitchClasses?.[0] ?? bassPc;
+  return Math.min(normalizePc(root - bassPc), normalizePc(bassPc - root));
 }
 
 /**
- * Candidate generation is intentionally local: each option is a small
- * mutation of the current chord, so harmony emerges from voice movement.
+ * Candidate generation now uses a small vocabulary of valid four-note chords.
+ * Harmonic Motion controls how much each chord should resemble the previous
+ * one; voice-leading happens later, so macro harmony and micro movement stay
+ * separate.
  */
 export function generateCandidates(current, options = {}) {
-  const random = options.random || Math.random;
   const settings = options.settings || {};
   const notes = normalizeNotes(current);
   const candidates = [];
   const seen = new Set();
   if (!notes.length) return candidates;
 
-  notes.forEach((note, index) => {
-    [-2, -1, 1, 2].forEach((delta) => {
-      const pitchClasses = notes.map((candidate) => candidate.pitchClass);
-      pitchClasses[index] = normalizePc(note.pitchClass + delta);
-      pushUnique(candidates, seen, uniqueCandidate(pitchClasses, "single-step"));
-    });
-  });
+  enumerateChordVocabulary()
+    .map((candidate) => ({
+      ...candidate,
+      similarity: computeChordSimilarity(candidate, current),
+      rootDistance: rootDistanceToCurrent(candidate, current),
+    }))
+    .filter((candidate) => candidate.similarity >= 0.5)
+    .sort((left, right) => {
+      const profile = MOTION_PROFILES[settings.harmonicMotion || "subtle"] || MOTION_PROFILES.subtle;
+      const leftDistance = Math.abs(left.similarity - profile.similarityTarget) + left.rootDistance * 0.035;
+      const rightDistance = Math.abs(right.similarity - profile.similarityTarget) + right.rootDistance * 0.035;
+      return leftDistance - rightDistance;
+    })
+    .slice(0, 54)
+    .forEach((candidate) => pushUnique(candidates, seen, candidate));
 
-  const pairTarget = settings.harmonicMotion === "static" ? 3 : settings.harmonicMotion === "restless" ? 7 : 5;
-  for (let attempt = 0; attempt < pairTarget * 2 && candidates.length < 22; attempt += 1) {
-    const first = Math.floor(random() * notes.length);
-    let second = Math.floor(random() * notes.length);
-    if (second === first) second = (second + 1) % notes.length;
-    pushUnique(candidates, seen, uniqueCandidate(movedPitchClasses(notes, [first, second], settings, random), "double-step"));
+  if (!candidates.length) {
+    pushUnique(candidates, seen, uniqueCandidate(notes.map((note) => note.pitchClass), "current-fallback"));
   }
 
-  const replacementTarget = settings.harmonicMotion === "restless" ? 5 : 3;
-  for (let attempt = 0; attempt < replacementTarget; attempt += 1) {
-    const index = Math.floor(random() * notes.length);
-    const widerDelta = randomSign(random) * (3 + Math.floor(random() * 3));
-    const pitchClasses = notes.map((candidate) => candidate.pitchClass);
-    pitchClasses[index] = normalizePc(notes[index].pitchClass + widerDelta);
-    pushUnique(candidates, seen, uniqueCandidate(pitchClasses, "nearby-replacement"));
-  }
-
-  if (settings.harmonicMotion === "evolving" || settings.harmonicMotion === "restless") {
-    for (let attempt = 0; attempt < 4; attempt += 1) {
-      const held = Math.floor(random() * notes.length);
-      const moving = notes.map((_, index) => index).filter((index) => index !== held);
-      pushUnique(candidates, seen, uniqueCandidate(movedPitchClasses(notes, moving, settings, random), "three-voice-slide"));
-    }
-  }
-
-  return candidates.slice(0, 18);
+  return candidates;
 }
 
 export function countCommonPitchClasses(candidate, current) {
@@ -207,6 +233,17 @@ export function countCommonPitchClasses(candidate, current) {
     if (currentPcs.has(pc)) common += 1;
   });
   return common;
+}
+
+function harmonicMotionSimilarityWeight(similarity, settings = {}) {
+  const profile = MOTION_PROFILES[settings.harmonicMotion || "subtle"] || MOTION_PROFILES.subtle;
+  if (similarity < profile.similarityFloor) {
+    const distanceBelow = profile.similarityFloor - similarity;
+    return Math.max(0.06, 0.34 - distanceBelow * 0.22);
+  }
+
+  const distanceToTarget = Math.abs(similarity - profile.similarityTarget);
+  return Math.exp(-(distanceToTarget * distanceToTarget) / (2 * profile.similarityWidth * profile.similarityWidth));
 }
 
 function permute(values) {
@@ -266,13 +303,15 @@ export function applyVoiceLeading(candidate, current, options = {}) {
 
   permutations.forEach((permutation) => {
     const voicedNotes = permutation.map((pc, index) => {
-      const previous = previousNotes[index];
-      const midi = octaveNear(48 + pc, previous.midi);
+      const previous = previousNotes[index] || previousNotes[previousNotes.length - 1];
+      const range = VOICE_RANGES[index] || VOICE_RANGES[VOICE_RANGES.length - 1];
+      const target = previous.midi * 0.72 + range.center * 0.28;
+      const midi = midiInRangeForVoice(pc, range, target);
       const movement = Math.abs(midi - previous.midi);
       return {
         pitchClass: pc,
         midi,
-        voiceId: previous.voiceId,
+        voiceId: previous.voiceId ?? index,
         role: previous.role,
         movement,
       };
@@ -283,7 +322,14 @@ export function applyVoiceLeading(candidate, current, options = {}) {
       if (note.movement <= 7) return sum;
       return sum + (note.movement - 7) * (note.movement - 7) * 1.2;
     }, 0);
-    const penalty = largeJumpPenalty + crossingPenalty(previousNotes, voicedNotes) + spacingPenalty(voicedNotes);
+    const rangePenalty = voicedNotes.reduce((sum, note, index) => {
+      const range = VOICE_RANGES[index] || VOICE_RANGES[VOICE_RANGES.length - 1];
+      const below = Math.max(0, range.min - note.midi);
+      const above = Math.max(0, note.midi - range.max);
+      const centerDistance = Math.abs(note.midi - range.center);
+      return sum + (below + above) * 8 + centerDistance * 0.08;
+    }, 0);
+    const penalty = largeJumpPenalty + crossingPenalty(previousNotes, voicedNotes) + spacingPenalty(voicedNotes) + rangePenalty;
     const cost = totalMovement + penalty;
 
     if (!best || cost < best.cost) {
@@ -355,7 +401,8 @@ export function scoreCandidate(candidate, current, options = {}) {
   const settings = options.settings || {};
   const profile = MOTION_PROFILES[settings.harmonicMotion || "subtle"] || MOTION_PROFILES.subtle;
   const commonToneCount = countCommonPitchClasses(candidate, current);
-  if (commonToneCount === 0) return null;
+  const similarity = Number.isFinite(candidate.similarity) ? candidate.similarity : computeChordSimilarity(candidate, current);
+  if (similarity < 0.5) return null;
 
   const voiced = applyVoiceLeading(candidate, current, options);
   const movements = voiced.notes.map((note) => {
@@ -366,8 +413,10 @@ export function scoreCandidate(candidate, current, options = {}) {
   const largeJumps = movements.filter((movement) => movement > 7).length;
   const stationary = movements.filter((movement) => movement === 0).length;
   const duplicatePitchClasses = voiced.notes.length - new Set(voiced.notes.map((note) => note.pitchClass)).size;
-  const commonToneBase = { 3: 38, 2: 24, 1: 10 }[commonToneCount] || 0;
-  const commonToneBonus = commonToneBase * (profile.commonToneWeights[commonToneCount] || 1);
+  const similarityWeight = harmonicMotionSimilarityWeight(similarity, settings);
+  const similarityBonus = 36 * similarityWeight + similarity * 7;
+  const qualityBonus = (candidate.qualityWeight || 0.6) * 6;
+  const rootMotionPenalty = rootDistanceToCurrent(candidate, current) * (settings.harmonicMotion === "restless" ? 0.26 : 0.54);
   const smoothBonus = Math.max(0, 34 - voiced.totalMovement * 1.7 * profile.movementWeight);
   const stepwiseBonus = smallMoves * (5 + profile.restlessBias * 2) + stationary * (1.8 - profile.restlessBias);
   const motionAmountBonus = settings.harmonicMotion === "restless"
@@ -381,10 +430,12 @@ export function scoreCandidate(candidate, current, options = {}) {
   const jumpPenalty = largeJumps * 16 + voiced.voiceLeadingPenalty;
   const score =
     3 +
-    commonToneBonus +
+    similarityBonus +
+    qualityBonus +
     smoothBonus +
     stepwiseBonus +
     motionAmountBonus -
+    rootMotionPenalty -
     pitchCenterPenalty -
     repeatPenalty -
     clusterPenalty -
@@ -395,6 +446,8 @@ export function scoreCandidate(candidate, current, options = {}) {
     notes: voiced.notes,
     score: Math.max(0.01, score),
     commonToneCount,
+    similarity,
+    similarityWeight,
     totalMovement: voiced.totalMovement,
     pitchCenterPenalty,
     repetitionPenalty: repeatPenalty,
@@ -427,5 +480,7 @@ export function generateNextChord(current, options = {}) {
       midi: note.midi,
       voiceId: note.voiceId,
     })),
+    root: selected.candidate.root,
+    quality: selected.candidate.quality,
   };
 }
