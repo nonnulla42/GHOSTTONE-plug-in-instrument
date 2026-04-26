@@ -678,6 +678,9 @@ function emitEvolveEvents(events, context, previousVoiceEvents) {
   const densityByMotion = { static: 0.55, subtle: 0.68, evolving: 0.80, restless: 0.92 };
   const density = densityByMotion[settings.harmonicMotion || "subtle"] || 0.68;
 
+  // inter-voice shared state: written by each voice after emitting, read by peers
+  const sharedVoiceState = notes.map(() => ({ lastInterval: 0, isActiveStrong: false }));
+
   notes.forEach((note, voiceIndex) => {
     const voiceId = noteVoiceId(note, voiceIndex);
 
@@ -712,6 +715,16 @@ function emitEvolveEvents(events, context, previousVoiceEvents) {
         }
       }
 
+      // inter-voice rules (all probabilistic, never deterministic)
+      const anyPeerLeap = sharedVoiceState.some((vs, i) => i !== voiceIndex && vs.isActiveStrong);
+      // bonus: yield step to the "shining" voice occasionally
+      if (anyPeerLeap && rand() < 0.15) { step += 1; continue; }
+      // echo: loosely mirror the interval of a recently-active peer
+      const echoPeer = sharedVoiceState.find((vs, i) => i !== voiceIndex && vs.lastInterval > 0);
+      const echoInterval = (echoPeer && rand() < 0.25) ? echoPeer.lastInterval : 0;
+      // tension-resolve: if the previous note in THIS voice was a tension role, push toward step
+      const needsResolve = previousEvent?.role === "tension" && rand() < 0.6;
+
       // melodic distance scoring: weight all candidates by interval from previous note
       const previousMidi = previousEvent?.midi ?? notes[currentNoteIndex]?.midi ?? 60;
       const preferredIndex = ((currentNoteIndex + direction + totalVoices) % totalVoices);
@@ -724,8 +737,15 @@ function emitEvolveEvents(events, context, previousVoiceEvents) {
         else if (interval <= 5)   weight = 1.0;
         else if (interval <= 9)   weight = 0.5;
         else                      weight = 0.2;
-        if (lastInterval > 5 && interval <= 2) weight *= 1.8; // resolve after leap
-        if (i === preferredIndex) weight *= 1.5;              // direction bias
+        if (lastInterval > 5 && interval <= 2)              weight *= 1.8; // resolve after own leap
+        if (anyPeerLeap && interval <= 2)                   weight *= 1.3; // rule 1: counterweight
+        if (anyPeerLeap && interval > 5)                    weight *= 0.6; // rule 1: no double leap
+        if (echoInterval > 0 && Math.abs(interval - echoInterval) <= 1) weight *= 1.4; // rule 2: echo
+        if (needsResolve && interval <= 2)                  weight *= 2.0; // rule 3: resolve tension
+        if (needsResolve && interval > 5)                   weight *= 0.3; // rule 3: block new tension
+        if (i === preferredIndex)                           weight *= 1.5; // direction bias
+        weight = Math.max(0.2, Math.min(3.0, weight));     // clamp: prevent extreme stacking
+        weight = Math.pow(weight, 0.9);                    // soft compression: preserve order, reduce dominance
         return weight;
       });
       const totalWeight = noteWeights.reduce((s, w) => s + w, 0);
@@ -794,6 +814,9 @@ function emitEvolveEvents(events, context, previousVoiceEvents) {
       lastInterval = Math.abs(selected.midi - previousMidi);
       previousEvent = { midi: selected.midi, role };
       previousVoiceEvents.set(voiceId, previousEvent);
+      // publish this voice's state so peers can read it in subsequent iterations
+      sharedVoiceState[voiceIndex].lastInterval = lastInterval;
+      sharedVoiceState[voiceIndex].isActiveStrong = lastInterval > 4 || durationSteps >= 3;
 
       step += durationSteps;
       currentNoteIndex = nextNoteIndex;
