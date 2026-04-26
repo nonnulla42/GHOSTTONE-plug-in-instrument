@@ -402,6 +402,16 @@ export function buildInfiniteSections(seedSections, settings, seed, makeRandom) 
   return buildInfiniteSectionSequence(seedSections, settings, seed, seedSections.length, makeRandom);
 }
 
+function pickFromMemory(progression, random) {
+  const total = progression.reduce((sum, _, i) => sum + 1 / (progression.length - i), 0);
+  let cursor = random() * total;
+  for (let i = 0; i < progression.length; i++) {
+    cursor -= 1 / (progression.length - i);
+    if (cursor <= 0) return { state: progression[i], index: i };
+  }
+  return { state: progression[progression.length - 1], index: progression.length - 1 };
+}
+
 export function buildInfiniteSectionSequence(seedSections, settings, seed, totalSectionCount, makeRandom) {
   if (!Array.isArray(seedSections) || seedSections.length === 0) return [];
 
@@ -414,15 +424,47 @@ export function buildInfiniteSectionSequence(seedSections, settings, seed, total
   generated.push(stateToSection(currentState, seedSections[0], 0, templateLoopBeats, seedSections.length));
   history.push(currentState);
 
+  // progression memory: sliding window of up to 16 states, with recency-biased recall
+  const MAX_MEMORY = 16;
+  const progression = [currentState];
+  let currentMemIndex = 0;
+  const memoryStrength = Number(settings.memoryStrength) || 0;
+  const useMemoryProb = 0.3 + memoryStrength * 0.5; // 0.3 at 0 (chaotic) → 0.8 at 1 (loop-heavy)
+
   for (let index = 1; index < totalSectionCount; index += 1) {
     const skeleton = seedSections[index % seedSections.length];
     const targetRootPc = index < seedSections.length ? skeleton.rootPc : null;
-    currentState = evolveHarmonicState(currentState, {
-      random,
-      settings,
-      targetRootPc,
-      history,
-    });
+
+    let nextState;
+    const r = random();
+
+    if (progression.length < 4 || r >= useMemoryProb) {
+      // CONTINUE FORWARD: generate a genuinely new chord
+      nextState = evolveHarmonicState(currentState, { random, settings, targetRootPc, history });
+      progression.push(nextState);
+      if (progression.length > MAX_MEMORY) progression.shift();
+      currentMemIndex = progression.length - 1;
+    } else {
+      const memR = random();
+      if (memR < 0.5) {
+        // LOOP / RETURN: recall a chord from memory with recency bias
+        const picked = pickFromMemory(progression, random);
+        nextState = picked.state;
+        currentMemIndex = picked.index;
+      } else if (memR < 0.75) {
+        // REPEAT CURRENT: hold the present chord
+        nextState = progression[currentMemIndex];
+      } else {
+        // MUTATION: evolve from a remembered chord (not necessarily the current one)
+        const base = pickFromMemory(progression, random).state;
+        nextState = evolveHarmonicState(base, { random, settings, targetRootPc, history });
+        progression.push(nextState);
+        if (progression.length > MAX_MEMORY) progression.shift();
+        currentMemIndex = progression.length - 1;
+      }
+    }
+
+    currentState = nextState;
     generated.push(stateToSection(currentState, skeleton, index, templateLoopBeats, seedSections.length));
     history.push(currentState);
     if (history.length > 8) history.shift();

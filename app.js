@@ -335,6 +335,7 @@ function bindEvents() {
     els.arpContinuity,
     els.scaleName,
     els.scaleInfluence,
+    els.memoryStrength,
     ...els.chordInputs,
   ].forEach((control) => {
     control.addEventListener("input", () => updateActivePatchFromUi());

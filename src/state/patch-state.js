@@ -39,6 +39,7 @@ export const DEFAULT_PATCH = Object.freeze({
     arpContinuity: 60,
     scaleName: "none",
     scaleInfluence: 30,
+    memoryStrength: 50,
   }),
   soundControls: Object.freeze({
     waveform: "triangle",
@@ -151,6 +152,7 @@ export function patchToCoreSettings(patch) {
     arpContinuity: normalized.core.arpContinuity / 100,
     scaleName: normalized.core.scaleName,
     scaleInfluence: normalized.core.scaleInfluence / 100,
+    memoryStrength: normalized.core.memoryStrength / 100,
   };
 }
 
@@ -258,6 +260,7 @@ function normalizeCore(core = {}) {
     arpContinuity: clampNumber(core.arpContinuity, 0, 100, DEFAULT_PATCH.core.arpContinuity),
     scaleName: ["none", "major", "minor", "dorian", "mixolydian", "phrygian"].includes(core.scaleName) ? core.scaleName : DEFAULT_PATCH.core.scaleName,
     scaleInfluence: clampNumber(core.scaleInfluence, 0, 100, DEFAULT_PATCH.core.scaleInfluence),
+    memoryStrength: clampNumber(core.memoryStrength, 0, 100, DEFAULT_PATCH.core.memoryStrength),
   };
 }
 
