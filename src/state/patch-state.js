@@ -37,6 +37,8 @@ export const DEFAULT_PATCH = Object.freeze({
     arpDensity: 50,
     arpVariation: 35,
     arpContinuity: 60,
+    scaleName: "none",
+    scaleInfluence: 30,
   }),
   soundControls: Object.freeze({
     waveform: "triangle",
@@ -147,6 +149,8 @@ export function patchToCoreSettings(patch) {
     arpDensity: normalized.core.arpDensity / 100,
     arpVariation: normalized.core.arpVariation / 100,
     arpContinuity: normalized.core.arpContinuity / 100,
+    scaleName: normalized.core.scaleName,
+    scaleInfluence: normalized.core.scaleInfluence / 100,
   };
 }
 
@@ -252,6 +256,8 @@ function normalizeCore(core = {}) {
     arpDensity: clampNumber(core.arpDensity, 0, 100, DEFAULT_PATCH.core.arpDensity),
     arpVariation: clampNumber(core.arpVariation, 0, 100, DEFAULT_PATCH.core.arpVariation),
     arpContinuity: clampNumber(core.arpContinuity, 0, 100, DEFAULT_PATCH.core.arpContinuity),
+    scaleName: ["none", "major", "minor", "dorian", "mixolydian", "phrygian"].includes(core.scaleName) ? core.scaleName : DEFAULT_PATCH.core.scaleName,
+    scaleInfluence: clampNumber(core.scaleInfluence, 0, 100, DEFAULT_PATCH.core.scaleInfluence),
   };
 }
 

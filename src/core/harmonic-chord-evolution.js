@@ -1,4 +1,12 @@
 const DEFAULT_IDEAL_CENTER = Object.freeze({ min: 48, max: 72 });
+
+const SCALE_DEFINITIONS = Object.freeze({
+  major:      Object.freeze([0, 2, 4, 5, 7, 9, 11]),
+  minor:      Object.freeze([0, 2, 3, 5, 7, 8, 10]),
+  dorian:     Object.freeze([0, 2, 3, 5, 7, 9, 10]),
+  mixolydian: Object.freeze([0, 2, 4, 5, 7, 9, 10]),
+  phrygian:   Object.freeze([0, 1, 3, 5, 7, 8, 10]),
+});
 const VOICE_RANGES = Object.freeze([
   Object.freeze({ min: 42, max: 55, center: 48 }),
   Object.freeze({ min: 48, max: 62, center: 55 }),
@@ -72,6 +80,17 @@ const CHORD_QUALITIES = Object.freeze([
   Object.freeze({ name: "aug7", intervals: Object.freeze([0, 4, 8, 10]), weight: 0.34 }),
   Object.freeze({ name: "maj7#11", intervals: Object.freeze([0, 4, 11, 18]), weight: 0.5 }),
 ]);
+
+function buildScaleNotes(scaleName, root) {
+  const intervals = SCALE_DEFINITIONS[scaleName];
+  if (!intervals) return null;
+  return intervals.map((interval) => normalizePc(root + interval));
+}
+
+function computeScaleScore(pitchClasses, scaleNotes) {
+  if (!scaleNotes) return 0;
+  return pitchClasses.reduce((score, pc) => (scaleNotes.includes(normalizePc(pc)) ? score + 1 : score), 0);
+}
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -652,13 +671,24 @@ export function scoreCandidate(candidate, current, options = {}) {
   const repeatPenalty = repetitionPenalty({ notes: voiced.notes }, options);
   const clusterPenalty = duplicatePitchClasses * 8 + spacingPenalty(voiced.notes) * 0.72;
   const jumpPenalty = largeJumps * 16 + voiced.voiceLeadingPenalty;
+  const currentNotes = normalizeNotes(current);
+  const anchorNote = currentNotes.find((n) => n.role === "anchor");
+  const scaleRoot = anchorNote?.pitchClass ?? currentNotes[0]?.pitchClass ?? 0;
+  const scaleNotes = (settings.scaleName && settings.scaleName !== "none")
+    ? buildScaleNotes(settings.scaleName, scaleRoot)
+    : null;
+  const scaleBias = scaleNotes
+    ? computeScaleScore(candidate.pitchClasses || [], scaleNotes) * (Number(settings.scaleInfluence) || 0) * 5
+    : 0;
+
   const rawScore =
     3 +
     similarityBonus +
     qualityBonus +
     smoothBonus +
     stepwiseBonus +
-    motionAmountBonus -
+    motionAmountBonus +
+    scaleBias -
     rootMotionPenalty -
     pitchCenterPenalty -
     repeatPenalty -

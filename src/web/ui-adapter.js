@@ -33,6 +33,9 @@ export function getElements(root = document) {
     arpDensity: root.querySelector("#arpDensity"),
     arpVariation: root.querySelector("#arpVariation"),
     arpContinuity: root.querySelector("#arpContinuity"),
+    scaleName: root.querySelector("#scaleName"),
+    scaleInfluence: root.querySelector("#scaleInfluence"),
+    scaleInfluenceValue: root.querySelector("#scaleInfluenceValue"),
     waveform: root.querySelector("#waveform"),
     cutoff: root.querySelector("#cutoff"),
     attack: root.querySelector("#attack"),
@@ -97,6 +100,8 @@ export function readCoreSettings(els, mode, generatorMode = "classic") {
     arpDensity: Number(els.arpDensity.value) / 100,
     arpVariation: Number(els.arpVariation.value) / 100,
     arpContinuity: Number(els.arpContinuity.value) / 100,
+    scaleName: els.scaleName?.value ?? "none",
+    scaleInfluence: Number(els.scaleInfluence?.value ?? 30) / 100,
   };
 }
 
@@ -189,6 +194,7 @@ export function updateReadouts(els, pattern, settings, bpm, soundSettings, curre
   els.arpDensityValue.textContent = Math.round(settings.arpDensity * 100);
   els.arpVariationValue.textContent = Math.round(settings.arpVariation * 100);
   els.arpContinuityValue.textContent = Math.round(settings.arpContinuity * 100);
+  if (els.scaleInfluenceValue) els.scaleInfluenceValue.textContent = Math.round((settings.scaleInfluence ?? 0) * 100);
   els.rangeReadout.textContent = `+/-${Math.round(maxOffset)} cents`;
   els.eventReadout.textContent = String(pattern.events.length);
   els.currentChord.textContent = pattern.sections[currentSectionIndex]?.label || "-";

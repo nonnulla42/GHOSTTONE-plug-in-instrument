@@ -162,6 +162,22 @@
                 <option value="0">Strict</option>
               </select>
             </label>
+            <label class="select-row">
+              <span>Scale</span>
+              <select id="scaleName">
+                <option value="none" selected>None</option>
+                <option value="major">Major</option>
+                <option value="minor">Minor</option>
+                <option value="dorian">Dorian</option>
+                <option value="mixolydian">Mixolydian</option>
+                <option value="phrygian">Phrygian</option>
+              </select>
+            </label>
+            <label class="slider-row compact">
+              <span>Scale Influence</span>
+              <strong id="scaleInfluenceValue">30</strong>
+              <input id="scaleInfluence" type="range" min="0" max="100" value="30" />
+            </label>
           </div>
 
           <div class="panel-block">
