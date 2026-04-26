@@ -665,33 +665,97 @@ function emitEvolveEvents(events, context, previousVoiceEvents) {
   const { section, sectionIndex, notes, rand, settings, prevChord, nextChord } = context;
   const barStart = section.startBeat;
   const barEnd = section.startBeat + section.durationBeats;
+  const totalVoices = notes.length;
+  if (!totalVoices) return;
 
-  notes.forEach((note, index) => {
-    const voiceId = noteVoiceId(note, index);
-    const role = note.harmonicRole || assignHarmonicRole(note);
-    let cursor = barStart;
+  const MIN_GAP = 0.02;
+
+  notes.forEach((note, voiceIndex) => {
+    const voiceId = noteVoiceId(note, voiceIndex);
+
+    // 1. Voice phase offset: stagger starts so voices don't all fire at barStart
+    const phaseOffset = (voiceIndex / totalVoices) * (section.durationBeats * 0.5);
+    let cursor = barStart + phaseOffset;
     let previousEvent = previousVoiceEvents.get(voiceId) || null;
+    // initialized just below barStart so the first note is never blocked by the gap check
+    let previousEndBeat = barStart - MIN_GAP;
+    let currentNoteIndex = voiceIndex;
+    let direction = 1;
+    let repeatCount = 0;
+    let drift = 0;
 
     while (cursor < barEnd - 1e-6) {
-      const selected = keepAssignedPitchClass(note, previousEvent, pickMotionType(role, rand));
-      const motionType = motionTypeFromMovement(previousEvent, selected.midi);
-      const remainingBeats = barEnd - cursor;
-      const durationBeats = Math.min(remainingBeats, resolveDurationBeats(role, "evolve", rand, {
-        sectionBeats: section.durationBeats,
-        remainingBeats,
-      }));
+      // 4. Phrase direction: soft inertia — keep 70%, pause 15%, flip 15%
+      if (rand() >= 0.7) {
+        if (rand() < 0.5) {
+          direction = 0;
+        } else {
+          direction = direction === 0 ? (rand() < 0.5 ? 1 : -1) : -direction;
+        }
+      }
+      const nextNoteIndex = ((currentNoteIndex + direction) % totalVoices + totalVoices) % totalVoices;
+      let pickedNote = notes[nextNoteIndex];
+      const pickedPc = normalizePc(pickedNote.pc ?? pickedNote.midi);
+      const prevPc = previousEvent ? normalizePc(previousEvent.midi) : -1;
 
-      addRoleBasedEvent(events, selected, sectionIndex, voiceId, cursor, durationBeats, rand, settings, prevChord, section, nextChord, {
+      // 3. Anti-repetition: probabilistic — allows occasional hook repetitions
+      if (pickedPc === prevPc) {
+        repeatCount++;
+        if (repeatCount >= 2 && rand() < 0.7) {
+          const alt = notes.find((n, i) => i !== nextNoteIndex && normalizePc(n.pc ?? n.midi) !== pickedPc);
+          if (alt) { pickedNote = alt; repeatCount = 0; }
+        }
+      } else {
+        repeatCount = 0;
+      }
+
+      // 6. Role-based durations (anchor long, tension short)
+      const role = pickedNote.harmonicRole || assignHarmonicRole(pickedNote);
+      const selected = keepAssignedPitchClass(pickedNote, previousEvent, pickMotionType(role, rand));
+      const motionType = motionTypeFromMovement(previousEvent, selected.midi);
+
+      // Fix 4: apply microtiming first, then enforce timing constraints
+      let startBeat = cursor + (rand() - 0.5) * 0.1;
+
+      // Fix 1+2: hard no-overlap — startBeat must be at least MIN_GAP after previous event ends
+      if (startBeat < previousEndBeat + MIN_GAP) {
+        startBeat = previousEndBeat + MIN_GAP;
+      }
+
+      // Fix 3: bail if we've been pushed past the bar boundary
+      if (startBeat >= barEnd) break;
+
+      const remainingBeats = barEnd - startBeat;
+      const durationBeats = Math.min(
+        remainingBeats,
+        resolveDurationBeats(role, "evolve", rand, { sectionBeats: section.durationBeats, remainingBeats }),
+      );
+      if (durationBeats < 1e-6) break;
+
+      addRoleBasedEvent(events, selected, sectionIndex, voiceId, startBeat, durationBeats, rand, settings, prevChord, section, nextChord, {
         motionType,
         carriedFromPrevious: false,
       });
 
-      previousEvent = {
-        midi: selected.midi,
-        role,
-      };
+      previousEndBeat = startBeat + durationBeats;
+      previousEvent = { midi: selected.midi, role };
       previousVoiceEvents.set(voiceId, previousEvent);
-      cursor += durationBeats;
+
+      // 2. Monophonic: cursor tied to actual event end, not nominal duration
+      cursor = previousEndBeat;
+      currentNoteIndex = nextNoteIndex;
+
+      // 4b. Cumulative micro drift: mean-reverting so drift stays alive but never parks at limits
+      drift = clamp(drift * 0.98 + (rand() - 0.5) * 0.04, -0.12, 0.12);
+      cursor += drift;
+
+      // 7. Optional rest: tension breathes more, anchor sustains more
+      const restChance = role === "tension" ? 0.25 : role === "anchor" ? 0.1 : 0.15;
+      if (rand() < restChance) {
+        const restOptions = [0.125, 0.25, 0.375];
+        const rest = restOptions[Math.floor(rand() * restOptions.length)];
+        if (barEnd - cursor > rest) cursor += rest;
+      }
     }
   });
 }

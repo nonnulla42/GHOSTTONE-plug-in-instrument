@@ -87,9 +87,18 @@ function buildScaleNotes(scaleName, root) {
   return intervals.map((interval) => normalizePc(root + interval));
 }
 
-function computeScaleScore(pitchClasses, scaleNotes) {
+function computeScaleScore(pitchClasses, scaleNotes, root) {
   if (!scaleNotes) return 0;
-  return pitchClasses.reduce((score, pc) => (scaleNotes.includes(normalizePc(pc)) ? score + 1 : score), 0);
+  return pitchClasses.reduce((score, pc) => {
+    const normalized = normalizePc(pc);
+    if (!scaleNotes.includes(normalized)) return score;
+    const interval = normalizePc(normalized - root);
+    if (interval === 0)             return score + 2.0; // root
+    if (interval === 7)             return score + 1.5; // fifth
+    if (interval === 3 || interval === 4) return score + 1.3; // third
+    if (interval === 5 || interval === 11) return score + 0.7; // fourth / leading tone
+    return score + 1.0;                                 // other scale degrees
+  }, 0);
 }
 
 function clamp(value, min, max) {
@@ -678,7 +687,7 @@ export function scoreCandidate(candidate, current, options = {}) {
     ? buildScaleNotes(settings.scaleName, scaleRoot)
     : null;
   const scaleBias = scaleNotes
-    ? computeScaleScore(candidate.pitchClasses || [], scaleNotes) * (Number(settings.scaleInfluence) || 0) * 5
+    ? computeScaleScore(candidate.pitchClasses || [], scaleNotes, scaleRoot) * (Number(settings.scaleInfluence) || 0) * 5
     : 0;
 
   const rawScore =
