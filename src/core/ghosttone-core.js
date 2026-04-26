@@ -668,24 +668,42 @@ function emitEvolveEvents(events, context, previousVoiceEvents) {
   const totalVoices = notes.length;
   if (!totalVoices) return;
 
+  const STEPS = 16;
+  const stepDuration = section.durationBeats / STEPS;
   const MIN_GAP = 0.02;
+  // shared across all voices: how many voices are playing on each 16th-note step
+  const occupiedSteps = new Array(STEPS).fill(0);
+
+  // density: how tightly notes follow each other, driven by harmonic motion
+  const densityByMotion = { static: 0.55, subtle: 0.68, evolving: 0.80, restless: 0.92 };
+  const density = densityByMotion[settings.harmonicMotion || "subtle"] || 0.68;
 
   notes.forEach((note, voiceIndex) => {
     const voiceId = noteVoiceId(note, voiceIndex);
 
-    // 1. Voice phase offset: stagger starts so voices don't all fire at barStart
-    const phaseOffset = (voiceIndex / totalVoices) * (section.durationBeats * 0.5);
-    let cursor = barStart + phaseOffset;
+    // phase offset → initial step: voices spread across first half of bar
+    let step = clamp(
+      Math.floor((voiceIndex / totalVoices) * STEPS * 0.5) + Math.floor(rand() * 3) - 1,
+      0,
+      STEPS - 1,
+    );
+
     let previousEvent = previousVoiceEvents.get(voiceId) || null;
-    // initialized just below barStart so the first note is never blocked by the gap check
     let previousEndBeat = barStart - MIN_GAP;
     let currentNoteIndex = voiceIndex;
     let direction = 1;
     let repeatCount = 0;
-    let drift = 0;
+    let stepGap = 0; // gap inertia: steps to skip after each note
+    let lastInterval = 0;
 
-    while (cursor < barEnd - 1e-6) {
-      // 4. Phrase direction: soft inertia — keep 70%, pause 15%, flip 15%
+    while (step < STEPS) {
+      // anti-stacking: hard max 2 voices per step; prefer 1 (50% skip for better density)
+      if (occupiedSteps[step] >= 2 || (occupiedSteps[step] >= 1 && rand() < 0.5)) {
+        step += 1;
+        continue;
+      }
+
+      // phrase direction: soft inertia — keep 70%, pause 15%, flip 15%
       if (rand() >= 0.7) {
         if (rand() < 0.5) {
           direction = 0;
@@ -693,12 +711,36 @@ function emitEvolveEvents(events, context, previousVoiceEvents) {
           direction = direction === 0 ? (rand() < 0.5 ? 1 : -1) : -direction;
         }
       }
-      const nextNoteIndex = ((currentNoteIndex + direction) % totalVoices + totalVoices) % totalVoices;
+
+      // melodic distance scoring: weight all candidates by interval from previous note
+      const previousMidi = previousEvent?.midi ?? notes[currentNoteIndex]?.midi ?? 60;
+      const preferredIndex = ((currentNoteIndex + direction + totalVoices) % totalVoices);
+      const noteWeights = notes.map((n, i) => {
+        const candidateMidi = octaveNear(n.midi ?? n.pc, previousMidi);
+        const interval = Math.abs(candidateMidi - previousMidi);
+        let weight;
+        if (interval === 0)       weight = 0.8;
+        else if (interval <= 2)   weight = 2.0;
+        else if (interval <= 5)   weight = 1.0;
+        else if (interval <= 9)   weight = 0.5;
+        else                      weight = 0.2;
+        if (lastInterval > 5 && interval <= 2) weight *= 1.8; // resolve after leap
+        if (i === preferredIndex) weight *= 1.5;              // direction bias
+        return weight;
+      });
+      const totalWeight = noteWeights.reduce((s, w) => s + w, 0);
+      let wCursor = rand() * totalWeight;
+      let nextNoteIndex = preferredIndex;
+      for (let i = 0; i < noteWeights.length; i++) {
+        wCursor -= noteWeights[i];
+        if (wCursor <= 0) { nextNoteIndex = i; break; }
+      }
+
       let pickedNote = notes[nextNoteIndex];
       const pickedPc = normalizePc(pickedNote.pc ?? pickedNote.midi);
-      const prevPc = previousEvent ? normalizePc(previousEvent.midi) : -1;
+      const prevPc = normalizePc(previousMidi);
 
-      // 3. Anti-repetition: probabilistic — allows occasional hook repetitions
+      // anti-repetition: probabilistic — allows occasional hook repetitions
       if (pickedPc === prevPc) {
         repeatCount++;
         if (repeatCount >= 2 && rand() < 0.7) {
@@ -709,53 +751,58 @@ function emitEvolveEvents(events, context, previousVoiceEvents) {
         repeatCount = 0;
       }
 
-      // 6. Role-based durations (anchor long, tension short)
       const role = pickedNote.harmonicRole || assignHarmonicRole(pickedNote);
       const selected = keepAssignedPitchClass(pickedNote, previousEvent, pickMotionType(role, rand));
       const motionType = motionTypeFromMovement(previousEvent, selected.midi);
 
-      // Fix 4: apply microtiming first, then enforce timing constraints
-      let startBeat = cursor + (rand() - 0.5) * 0.1;
+      // role-based duration → step count, capped to keep voice active across the bar
+      const remainingBeats = (STEPS - step) * stepDuration;
+      const rawDuration = resolveDurationBeats(role, "evolve", rand, {
+        sectionBeats: section.durationBeats,
+        remainingBeats,
+      });
+      // anchor can hold slightly longer; other roles capped at 4 steps (1 beat)
+      const maxSteps = role === "anchor" ? 6 : 4;
+      let durationSteps = clamp(Math.max(1, Math.round(rawDuration / stepDuration)), 1, Math.min(maxSteps, STEPS - step));
 
-      // Fix 1+2: hard no-overlap — startBeat must be at least MIN_GAP after previous event ends
-      if (startBeat < previousEndBeat + MIN_GAP) {
-        startBeat = previousEndBeat + MIN_GAP;
+      // legato: occasionally bridge into the next slot when it is free
+      if (rand() < 0.2 && step + durationSteps < STEPS && occupiedSteps[step + durationSteps] === 0) {
+        durationSteps += 1;
       }
 
-      // Fix 3: bail if we've been pushed past the bar boundary
+      // mark grid steps as occupied
+      for (let i = 0; i < durationSteps && step + i < STEPS; i++) {
+        occupiedSteps[step + i] += 1;
+      }
+
+      // grid position → beat time, then apply micro timing
+      let startBeat = barStart + step * stepDuration + (rand() - 0.5) * 0.05 * stepDuration;
+
+      // per-voice monophony: hard no-overlap guarantee
+      if (startBeat < previousEndBeat + MIN_GAP) startBeat = previousEndBeat + MIN_GAP;
       if (startBeat >= barEnd) break;
 
-      const remainingBeats = barEnd - startBeat;
-      const durationBeats = Math.min(
-        remainingBeats,
-        resolveDurationBeats(role, "evolve", rand, { sectionBeats: section.durationBeats, remainingBeats }),
-      );
-      if (durationBeats < 1e-6) break;
+      const durationClamped = Math.min(durationSteps * stepDuration, barEnd - startBeat);
+      if (durationClamped < 1e-6) break;
 
-      addRoleBasedEvent(events, selected, sectionIndex, voiceId, startBeat, durationBeats, rand, settings, prevChord, section, nextChord, {
+      addRoleBasedEvent(events, selected, sectionIndex, voiceId, startBeat, durationClamped, rand, settings, prevChord, section, nextChord, {
         motionType,
         carriedFromPrevious: false,
       });
 
-      previousEndBeat = startBeat + durationBeats;
+      previousEndBeat = startBeat + durationClamped;
+      lastInterval = Math.abs(selected.midi - previousMidi);
       previousEvent = { midi: selected.midi, role };
       previousVoiceEvents.set(voiceId, previousEvent);
 
-      // 2. Monophonic: cursor tied to actual event end, not nominal duration
-      cursor = previousEndBeat;
+      step += durationSteps;
       currentNoteIndex = nextNoteIndex;
 
-      // 4b. Cumulative micro drift: mean-reverting so drift stays alive but never parks at limits
-      drift = clamp(drift * 0.98 + (rand() - 0.5) * 0.04, -0.12, 0.12);
-      cursor += drift;
-
-      // 7. Optional rest: tension breathes more, anchor sustains more
-      const restChance = role === "tension" ? 0.25 : role === "anchor" ? 0.1 : 0.15;
-      if (rand() < restChance) {
-        const restOptions = [0.125, 0.25, 0.375];
-        const rest = restOptions[Math.floor(rand() * restOptions.length)];
-        if (barEnd - cursor > rest) cursor += rest;
+      // step gap inertia: 30% chance to update; density controls tightness
+      if (rand() < 0.3) {
+        stepGap = rand() < density ? 0 : 1; // dense → no gap, sparse → 1 step
       }
+      step += stepGap;
     }
   });
 }
