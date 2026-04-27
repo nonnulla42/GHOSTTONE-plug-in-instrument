@@ -44,6 +44,7 @@ export const DEFAULT_PATCH = Object.freeze({
     scaleName: "none",
     scaleInfluence: 30,
     memoryStrength: 50,
+    registerCenter: 60,
   }),
   soundControls: Object.freeze({
     waveform: "triangle",
@@ -163,6 +164,7 @@ export function patchToCoreSettings(patch) {
     scaleName: normalized.core.scaleName,
     scaleInfluence: normalized.core.scaleInfluence / 100,
     memoryStrength: normalized.core.memoryStrength / 100,
+    registerCenter: normalized.core.registerCenter,
   };
 }
 
@@ -277,6 +279,7 @@ function normalizeCore(core = {}) {
     scaleName: ["none", "major", "minor", "dorian", "mixolydian", "phrygian"].includes(core.scaleName) ? core.scaleName : DEFAULT_PATCH.core.scaleName,
     scaleInfluence: clampNumber(core.scaleInfluence, 0, 100, DEFAULT_PATCH.core.scaleInfluence),
     memoryStrength: clampNumber(core.memoryStrength, 0, 100, DEFAULT_PATCH.core.memoryStrength),
+    registerCenter: clampNumber(core.registerCenter, 48, 72, DEFAULT_PATCH.core.registerCenter),
   };
 }
 

@@ -63,6 +63,7 @@ export const defaultSettings = Object.freeze({
   arpDensity: 0.5,
   arpVariation: 0.35,
   arpContinuity: 0.6,
+  registerCenter: 60,
 });
 
 export const defaultProgression = Object.freeze([
@@ -648,179 +649,118 @@ function emitArpEvents(events, context, previousVoiceEvents) {
   }
 }
 
+// DEPRECATED: evolve mode removed from UI. Code kept for reference.
 function emitEvolveEvents(events, context, previousVoiceEvents) {
   const { section, sectionIndex, notes, rand, settings, prevChord, nextChord } = context;
   const barStart = section.startBeat;
   const barEnd = section.startBeat + section.durationBeats;
-  const totalVoices = notes.length;
-  if (!totalVoices) return;
+  if (!notes.length) return;
 
-  const STEPS = 16;
-  const stepDuration = section.durationBeats / STEPS;
-  const MIN_GAP = 0.02;
-  // shared across all voices: how many voices are playing on each 16th-note step
-  const occupiedSteps = new Array(STEPS).fill(0);
-
-  // density: how tightly notes follow each other, driven by harmonic motion
+  const STREAM_ID = 0;
+  const MIN_GAP = 0.015;
+  const stepDuration = section.durationBeats / 16;
   const densityByMotion = { static: 0.55, subtle: 0.68, evolving: 0.80, restless: 0.92 };
   const density = densityByMotion[settings.harmonicMotion || "subtle"] || 0.68;
-  // variation: melodic interval freedom — 0=stepwise tight, 1=leaps allowed
   const variation = settings.voicingVariation ?? 0.35;
   const stepBias = lerp(2.0, 1.0, variation);
   const midBias  = lerp(1.0, 0.9, variation);
   const wideBias = lerp(0.5, 0.75, variation);
   const leapBias = lerp(0.2, 0.8, variation);
 
-  // inter-voice shared state: written by each voice after emitting, read by peers
-  const sharedVoiceState = notes.map(() => ({ lastInterval: 0, isActiveStrong: false }));
+  let previousEvent = previousVoiceEvents.get(STREAM_ID) || null;
+  let currentBeat = barStart;
+  let currentNoteIndex = 0;
+  let direction = 1;
+  let repeatCount = 0;
+  let lastInterval = 0;
 
-  notes.forEach((note, voiceIndex) => {
-    const voiceId = noteVoiceId(note, voiceIndex);
+  while (currentBeat < barEnd - MIN_GAP) {
+    const remaining = barEnd - currentBeat;
 
-    // phase offset → initial step: voices spread across first half of bar
-    let step = clamp(
-      Math.floor((voiceIndex / totalVoices) * STEPS * 0.5) + Math.floor(rand() * 3) - 1,
-      0,
-      STEPS - 1,
-    );
-
-    let previousEvent = previousVoiceEvents.get(voiceId) || null;
-    let previousEndBeat = barStart - MIN_GAP;
-    let currentNoteIndex = voiceIndex;
-    let direction = 1;
-    let repeatCount = 0;
-    let stepGap = 0; // gap inertia: steps to skip after each note
-    let lastInterval = 0;
-
-    while (step < STEPS) {
-      // anti-stacking: hard max 2 voices per step; prefer 1 (50% skip for better density)
-      if (occupiedSteps[step] >= 2 || (occupiedSteps[step] >= 1 && rand() < 0.5)) {
-        step += 1;
-        continue;
-      }
-
-      // phrase direction: soft inertia — keep 70%, pause 15%, flip 15%
-      if (rand() >= 0.7) {
-        if (rand() < 0.5) {
-          direction = 0;
-        } else {
-          direction = direction === 0 ? (rand() < 0.5 ? 1 : -1) : -direction;
-        }
-      }
-
-      // inter-voice rules (all probabilistic, never deterministic)
-      const anyPeerLeap = sharedVoiceState.some((vs, i) => i !== voiceIndex && vs.isActiveStrong);
-      // bonus: yield step to the "shining" voice occasionally
-      if (anyPeerLeap && rand() < 0.15) { step += 1; continue; }
-      // echo: loosely mirror the interval of a recently-active peer
-      const echoPeer = sharedVoiceState.find((vs, i) => i !== voiceIndex && vs.lastInterval > 0);
-      const echoInterval = (echoPeer && rand() < 0.25) ? echoPeer.lastInterval : 0;
-      // tension-resolve: if the previous note in THIS voice was a tension role, push toward step
-      const needsResolve = previousEvent?.role === "tension" && rand() < 0.6;
-
-      // melodic distance scoring: weight all candidates by interval from previous note
-      const previousMidi = previousEvent?.midi ?? notes[currentNoteIndex]?.midi ?? 60;
-      const preferredIndex = ((currentNoteIndex + direction + totalVoices) % totalVoices);
-      const noteWeights = notes.map((n, i) => {
-        const candidateMidi = octaveNear(n.midi ?? n.pc, previousMidi);
-        const interval = Math.abs(candidateMidi - previousMidi);
-        let weight;
-        if (interval === 0)       weight = lerp(0.9, 0.6, variation);
-        else if (interval <= 2)   weight = stepBias;
-        else if (interval <= 5)   weight = midBias;
-        else if (interval <= 9)   weight = wideBias;
-        else                      weight = leapBias;
-        if (lastInterval > 5 && interval <= 2)              weight *= 1.8; // resolve after own leap
-        if (anyPeerLeap && interval <= 2)                   weight *= 1.3; // rule 1: counterweight
-        if (anyPeerLeap && interval > 5)                    weight *= 0.6; // rule 1: no double leap
-        if (echoInterval > 0 && Math.abs(interval - echoInterval) <= 1) weight *= 1.4; // rule 2: echo
-        if (needsResolve && interval <= 2)                  weight *= 2.0; // rule 3: resolve tension
-        if (needsResolve && interval > 5)                   weight *= 0.3; // rule 3: block new tension
-        if (i === preferredIndex)                           weight *= 1.5; // direction bias
-        weight = Math.max(0.2, Math.min(3.0, weight));     // clamp: prevent extreme stacking
-        weight = Math.pow(weight, 0.9);                    // soft compression: preserve order, reduce dominance
-        return weight;
-      });
-      const totalWeight = noteWeights.reduce((s, w) => s + w, 0);
-      let wCursor = rand() * totalWeight;
-      let nextNoteIndex = preferredIndex;
-      for (let i = 0; i < noteWeights.length; i++) {
-        wCursor -= noteWeights[i];
-        if (wCursor <= 0) { nextNoteIndex = i; break; }
-      }
-
-      let pickedNote = notes[nextNoteIndex];
-      const pickedPc = normalizePc(pickedNote.pc ?? pickedNote.midi);
-      const prevPc = normalizePc(previousMidi);
-
-      // anti-repetition: probabilistic — allows occasional hook repetitions
-      if (pickedPc === prevPc) {
-        repeatCount++;
-        if (repeatCount >= 2 && rand() < 0.7) {
-          const alt = notes.find((n, i) => i !== nextNoteIndex && normalizePc(n.pc ?? n.midi) !== pickedPc);
-          if (alt) { pickedNote = alt; repeatCount = 0; }
-        }
+    // phrase direction: soft inertia — keep 70%, pause or flip 30%
+    if (rand() >= 0.7) {
+      if (rand() < 0.5) {
+        direction = 0;
       } else {
-        repeatCount = 0;
+        direction = direction === 0 ? (rand() < 0.5 ? 1 : -1) : -direction;
       }
-
-      const role = pickedNote.harmonicRole || assignHarmonicRole(pickedNote);
-      const selected = keepAssignedPitchClass(pickedNote, previousEvent, pickMotionType(role, rand));
-      const motionType = motionTypeFromMovement(previousEvent, selected.midi);
-
-      // role-based duration → step count, capped to keep voice active across the bar
-      const remainingBeats = (STEPS - step) * stepDuration;
-      const rawDuration = resolveDurationBeats(role, "evolve", rand, {
-        sectionBeats: section.durationBeats,
-        remainingBeats,
-      });
-      // anchor can hold slightly longer; other roles capped at 4 steps (1 beat)
-      const maxSteps = role === "anchor" ? 6 : 4;
-      let durationSteps = clamp(Math.max(1, Math.round(rawDuration / stepDuration)), 1, Math.min(maxSteps, STEPS - step));
-
-      // legato: occasionally bridge into the next slot when it is free
-      if (rand() < 0.2 && step + durationSteps < STEPS && occupiedSteps[step + durationSteps] === 0) {
-        durationSteps += 1;
-      }
-
-      // mark grid steps as occupied
-      for (let i = 0; i < durationSteps && step + i < STEPS; i++) {
-        occupiedSteps[step + i] += 1;
-      }
-
-      // grid position → beat time, then apply micro timing
-      let startBeat = barStart + step * stepDuration + (rand() - 0.5) * 0.05 * stepDuration;
-
-      // per-voice monophony: hard no-overlap guarantee
-      if (startBeat < previousEndBeat + MIN_GAP) startBeat = previousEndBeat + MIN_GAP;
-      if (startBeat >= barEnd) break;
-
-      const durationClamped = Math.min(durationSteps * stepDuration, barEnd - startBeat);
-      if (durationClamped < 1e-6) break;
-
-      addRoleBasedEvent(events, selected, sectionIndex, voiceId, startBeat, durationClamped, rand, settings, prevChord, section, nextChord, {
-        motionType,
-        carriedFromPrevious: false,
-      });
-
-      previousEndBeat = startBeat + durationClamped;
-      lastInterval = Math.abs(selected.midi - previousMidi);
-      previousEvent = { midi: selected.midi, role };
-      previousVoiceEvents.set(voiceId, previousEvent);
-      // publish this voice's state so peers can read it in subsequent iterations
-      sharedVoiceState[voiceIndex].lastInterval = lastInterval;
-      sharedVoiceState[voiceIndex].isActiveStrong = lastInterval > 4 || durationSteps >= 3;
-
-      step += durationSteps;
-      currentNoteIndex = nextNoteIndex;
-
-      // step gap inertia: 30% chance to update; density controls tightness
-      if (rand() < 0.3) {
-        stepGap = rand() < density ? 0 : 1; // dense → no gap, sparse → 1 step
-      }
-      step += stepGap;
     }
-  });
+
+    const previousMidi = previousEvent?.midi ?? notes[currentNoteIndex]?.midi ?? 60;
+    const preferredIndex = (currentNoteIndex + direction + notes.length) % notes.length;
+
+    const effectiveMidis = notes.map((n) => octaveNear(n.midi ?? (48 + (n.pc ?? 0)), previousMidi));
+
+    const halfRange = 6 + (18 - 6) * variation;
+    const distFromCenter = previousMidi - 60;
+    const centerPull = Math.abs(distFromCenter) > halfRange * 0.4;
+
+    const noteWeights = notes.map((n, i) => {
+      const interval = Math.abs(effectiveMidis[i] - previousMidi);
+      let weight;
+      if (interval === 0)       weight = lerp(0.9, 0.6, variation);
+      else if (interval <= 2)   weight = stepBias;
+      else if (interval <= 5)   weight = midBias;
+      else if (interval <= 9)   weight = wideBias;
+      else                      weight = leapBias;
+      if (lastInterval > 5 && interval <= 2)  weight *= 1.8;
+      if (centerPull) {
+        const towardCenter = distFromCenter > 0 ? effectiveMidis[i] < previousMidi : effectiveMidis[i] > previousMidi;
+        if (towardCenter) weight *= 1.5;
+      }
+      if (i === preferredIndex)               weight *= 1.5;
+      weight = Math.max(0.2, Math.min(3.0, weight));
+      return weight;
+    });
+
+    const totalWeight = noteWeights.reduce((s, w) => s + w, 0);
+    let wCursor = rand() * totalWeight;
+    let nextNoteIndex = preferredIndex;
+    for (let i = 0; i < noteWeights.length; i++) {
+      wCursor -= noteWeights[i];
+      if (wCursor <= 0) { nextNoteIndex = i; break; }
+    }
+
+    let pickedNote = notes[nextNoteIndex];
+    let pickedMidi = effectiveMidis[nextNoteIndex];
+
+    // anti-repetition: probabilistic, allows occasional repeated hooks
+    if (normalizePc(pickedMidi) === normalizePc(previousMidi)) {
+      repeatCount++;
+      if (repeatCount >= 2 && rand() < 0.7) {
+        const altIndex = notes.findIndex((n, i) => i !== nextNoteIndex && normalizePc(effectiveMidis[i]) !== normalizePc(previousMidi));
+        if (altIndex >= 0) { pickedNote = notes[altIndex]; pickedMidi = effectiveMidis[altIndex]; repeatCount = 0; }
+      }
+    } else {
+      repeatCount = 0;
+    }
+
+    const role = pickedNote.harmonicRole || assignHarmonicRole(pickedNote);
+    const selected = { ...pickedNote, midi: pickedMidi, pc: normalizePc(pickedMidi) };
+    const motionType = motionTypeFromMovement(previousEvent, selected.midi);
+
+    // role-based duration: anchor=long, color=medium, tension=short
+    const rawDuration = resolveDurationBeats(role, "evolve", rand, {
+      sectionBeats: section.durationBeats,
+      remainingBeats: remaining,
+    });
+    const duration = Math.min(Math.max(rawDuration, stepDuration), remaining - MIN_GAP);
+    if (duration < 1e-6) break;
+
+    addRoleBasedEvent(events, selected, sectionIndex, STREAM_ID, currentBeat, duration, rand, settings, prevChord, section, nextChord, {
+      motionType,
+      carriedFromPrevious: false,
+    });
+
+    lastInterval = Math.abs(selected.midi - previousMidi);
+    previousEvent = { midi: selected.midi, role };
+    previousVoiceEvents.set(STREAM_ID, previousEvent);
+
+    // gap between notes: density drives legato vs staccato tendency
+    const gap = rand() < density ? MIN_GAP : stepDuration * (0.5 + rand() * 0.5);
+    currentBeat += duration + gap;
+    currentNoteIndex = nextNoteIndex;
+  }
 }
 
 function generateClassicEvents(events, sections, settings, normalizedSeed) {

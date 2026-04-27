@@ -1,6 +1,6 @@
 import { createPatchFromPreset, normalizePatch } from "../state/patch-state.js";
 
-const coreRangeControls = ["ghostAmount", "drift", "harmonyLock", "voicingVariation", "voicingContinuity", "arpDensity", "arpVariation", "arpContinuity", "scaleInfluence", "memoryStrength"];
+const coreRangeControls = ["ghostAmount", "drift", "harmonyLock", "voicingVariation", "voicingContinuity", "arpDensity", "arpVariation", "arpContinuity", "scaleInfluence", "memoryStrength", "registerCenter"];
 const coreSelectControls = ["colorMode", "harmonicMotion", "voicingStyle", "arpDirection", "arpFeel", "localScaleType", "localTargetDegree", "localDegreeFalloff", "globalRoot", "scaleName"];
 const coreToggleControls = ["stayMusical", "ghostEnabled"];
 const soundControls = ["waveform", "cutoff", "attack", "release", "space", "reverbMix", "delayMix"];

@@ -223,7 +223,7 @@
             <div class="segmented" role="group" aria-label="Motion mode">
               <button class="segment active" data-mode="pad" type="button">Pad</button>
               <button class="segment" data-mode="arp" type="button">Arp</button>
-              <button class="segment" data-mode="evolve" type="button">Evolve</button>
+              <!-- evolve: deprecated, code kept in ghosttone-core.js -->
             </div>
           </div>
 
@@ -289,6 +289,11 @@
               <span>Continuity</span>
               <strong id="voicingContinuityValue">65</strong>
               <input id="voicingContinuity" type="range" min="0" max="100" value="65" />
+            </label>
+            <label class="slider-row compact">
+              <span>Register</span>
+              <strong id="registerCenterValue">C4</strong>
+              <input id="registerCenter" type="range" min="48" max="72" step="1" value="60" />
             </label>
           </div>
 

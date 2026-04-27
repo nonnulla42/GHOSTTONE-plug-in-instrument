@@ -41,6 +41,8 @@ export function getElements(root = document) {
     scaleInfluenceValue: root.querySelector("#scaleInfluenceValue"),
     memoryStrength: root.querySelector("#memoryStrength"),
     memoryStrengthValue: root.querySelector("#memoryStrengthValue"),
+    registerCenter: root.querySelector("#registerCenter"),
+    registerCenterValue: root.querySelector("#registerCenterValue"),
     waveform: root.querySelector("#waveform"),
     cutoff: root.querySelector("#cutoff"),
     attack: root.querySelector("#attack"),
@@ -114,6 +116,7 @@ export function readCoreSettings(els, mode, generatorMode = "classic") {
     scaleName: els.scaleName?.value ?? "none",
     scaleInfluence: Number(els.scaleInfluence?.value ?? 30) / 100,
     memoryStrength: Number(els.memoryStrength?.value ?? 50) / 100,
+    registerCenter: Number(els.registerCenter?.value ?? 60),
   };
 }
 
@@ -210,6 +213,7 @@ export function updateReadouts(els, pattern, settings, bpm, soundSettings, curre
   els.arpContinuityValue.textContent = Math.round(settings.arpContinuity * 100);
   if (els.scaleInfluenceValue) els.scaleInfluenceValue.textContent = Math.round((settings.scaleInfluence ?? 0) * 100);
   if (els.memoryStrengthValue) els.memoryStrengthValue.textContent = Math.round((settings.memoryStrength ?? 0.5) * 100);
+  if (els.registerCenterValue) els.registerCenterValue.textContent = midiToNoteName(settings.registerCenter ?? 60);
   if (els.reverbMixValue) els.reverbMixValue.textContent = Math.round((soundSettings.reverbMix ?? 0) * 100);
   if (els.delayMixValue) els.delayMixValue.textContent = Math.round((soundSettings.delayMix ?? 0) * 100);
   els.rangeReadout.textContent = `+/-${Math.round(maxOffset)} cents`;
@@ -217,6 +221,11 @@ export function updateReadouts(els, pattern, settings, bpm, soundSettings, curre
   els.currentChord.textContent = pattern.sections[currentSectionIndex]?.label || "-";
   els.patternTitle.textContent = `${capitalize(settings.colorMode)} ${formatGeneratorMode(settings.generatorMode)} ${settings.mode} at ${bpm} BPM`;
   if (els.seedValue) els.seedValue.textContent = String(pattern.seed);
+}
+
+function midiToNoteName(midi) {
+  const names = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
+  return names[midi % 12] + (Math.floor(midi / 12) - 1);
 }
 
 function capitalize(value) {
