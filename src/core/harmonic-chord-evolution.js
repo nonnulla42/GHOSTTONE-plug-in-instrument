@@ -661,21 +661,21 @@ export function computePitchCenterPenalty(voicedChord, current, options = {}) {
   const halfRange = 6 + (18 - 6) * variation;
   const ideal = options.idealCenter || { min: 60 - halfRange, max: 60 + halfRange };
   const notes = normalizeNotes(voicedChord);
-  const previousNotes = normalizeNotes(current);
   const center = chordCenter(notes);
-  const previousCenter = chordCenter(previousNotes);
   const outsideLow = Math.max(0, ideal.min - center);
   const outsideHigh = Math.max(0, center - ideal.max);
   const outsidePenalty = (outsideLow + outsideHigh) * 2.4;
-  const upwardDrift = Math.max(0, center - previousCenter - profile.upwardDriftAllowance);
   const history = Array.isArray(options.history) ? options.history : [];
   const historyCenters = history
     .map((state) => normalizeNotes(state).length ? chordCenter(normalizeNotes(state)) : null)
     .filter((value) => Number.isFinite(value));
-  const recentCenter = historyCenters.length ? average(historyCenters.slice(-4)) : previousCenter;
-  const longUpwardDrift = Math.max(0, center - recentCenter - profile.upwardDriftAllowance * 1.6);
+  const idealMid = (ideal.min + ideal.max) / 2;
+  const recentAvg = historyCenters.length ? average(historyCenters.slice(-8)) : idealMid;
+  const drift = recentAvg - idealMid;
+  const targetCenter = clamp(idealMid - drift * 0.5, ideal.min, ideal.max);
+  const targetPull = Math.abs(center - targetCenter) * 1.8;
 
-  return (outsidePenalty + upwardDrift * 3.8 + longUpwardDrift * 3.2) * profile.centerWeight;
+  return (outsidePenalty + targetPull) * profile.centerWeight;
 }
 
 function repetitionPenalty(voicedChord, options = {}) {
