@@ -666,15 +666,7 @@ export function computePitchCenterPenalty(voicedChord, current, options = {}) {
   const outsideLow = Math.max(0, ideal.min - center);
   const outsideHigh = Math.max(0, center - ideal.max);
   const outsidePenalty = (outsideLow + outsideHigh) * 2.4;
-  const history = Array.isArray(options.history) ? options.history : [];
-  const historyCenters = history
-    .map((state) => normalizeNotes(state).length ? chordCenter(normalizeNotes(state)) : null)
-    .filter((value) => Number.isFinite(value));
-  const idealMid = (ideal.min + ideal.max) / 2;
-  const recentAvg = historyCenters.length ? average(historyCenters.slice(-8)) : idealMid;
-  const drift = recentAvg - idealMid;
-  const targetCenter = clamp(idealMid - drift * 0.5, ideal.min, ideal.max);
-  const targetPull = Math.abs(center - targetCenter) * 1.8;
+  const targetPull = Math.abs(center - registerCenter) * 1.8;
 
   return (outsidePenalty + targetPull) * profile.centerWeight;
 }

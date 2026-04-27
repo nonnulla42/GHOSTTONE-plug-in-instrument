@@ -261,13 +261,19 @@ function applyVoicing(notes, slotState, settings, previousNotes, sectionIndex, s
     let midi = note.midi;
     if (settings.voicingStyle === "open" && index % 2 === 1) midi += 12;
     if (settings.voicingStyle === "spread") midi += Math.floor(index / 2) * 12;
-    if (settings.voicingStyle === "low") midi -= index < 2 ? 12 : 0;
-    if (settings.voicingStyle === "high") midi += 12;
     if (settings.voicingStyle === "smooth" && previousNotes?.[index]) {
       midi = octaveNear(midi, previousNotes[index].midi);
     }
     return { ...note, midi };
   });
+
+  // Shift chord by whole octaves so its center lands near registerCenter
+  const targetCenter = settings.registerCenter ?? 60;
+  const chordMidpoint = voiced.reduce((s, n) => s + n.midi, 0) / voiced.length;
+  const octaveShift = Math.round((targetCenter - chordMidpoint) / 12) * 12;
+  if (octaveShift !== 0) {
+    voiced = voiced.map((note) => ({ ...note, midi: note.midi + octaveShift }));
+  }
 
   if (previousNotes?.length && continuity > 0) {
     voiced = voiced.map((note, index) => {
@@ -282,10 +288,7 @@ function applyVoicing(notes, slotState, settings, previousNotes, sectionIndex, s
     });
   }
 
-  voiced = normalizeAscending(voiced);
-  if (settings.voicingStyle === "low") voiced = voiced.map((note) => ({ ...note, midi: note.midi - 12 }));
-  if (settings.voicingStyle === "high") voiced = voiced.map((note) => ({ ...note, midi: note.midi + 12 }));
-  return voiced;
+  return normalizeAscending(voiced);
 }
 
 function shuffleNotes(notes, seed, amount = 1) {

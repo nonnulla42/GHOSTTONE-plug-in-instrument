@@ -267,7 +267,7 @@ function normalizeCore(core = {}) {
     colorMode: ["warm", "dreamy", "dark", "alien"].includes(core.colorMode) ? core.colorMode : DEFAULT_PATCH.core.colorMode,
     stayMusical: Boolean(core.stayMusical ?? DEFAULT_PATCH.core.stayMusical),
     ghostEnabled: Boolean(core.ghostEnabled ?? DEFAULT_PATCH.core.ghostEnabled),
-    voicingStyle: ["close", "open", "spread", "low", "high", "smooth"].includes(core.voicingStyle) ? core.voicingStyle : DEFAULT_PATCH.core.voicingStyle,
+    voicingStyle: ["close", "open", "spread", "smooth"].includes(core.voicingStyle) ? core.voicingStyle : DEFAULT_PATCH.core.voicingStyle,
     voicingVariation: clampNumber(core.voicingVariation, 0, 100, DEFAULT_PATCH.core.voicingVariation),
     voicingContinuity: clampNumber(core.voicingContinuity, 0, 100, DEFAULT_PATCH.core.voicingContinuity),
     arpDirection: ["up", "down", "updown", "insideout", "outsidein", "bounce", "free"].includes(core.arpDirection) ? core.arpDirection : DEFAULT_PATCH.core.arpDirection,
