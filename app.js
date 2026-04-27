@@ -339,6 +339,7 @@ function bindEvents() {
     els.arpDensity,
     els.arpVariation,
     els.arpContinuity,
+    els.globalRoot,
     els.scaleName,
     els.scaleInfluence,
     els.memoryStrength,

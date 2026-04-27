@@ -682,7 +682,10 @@ export function scoreCandidate(candidate, current, options = {}) {
   const jumpPenalty = largeJumps * 16 + voiced.voiceLeadingPenalty;
   const currentNotes = normalizeNotes(current);
   const anchorNote = currentNotes.find((n) => n.role === "anchor");
-  const scaleRoot = anchorNote?.pitchClass ?? currentNotes[0]?.pitchClass ?? 0;
+  const dynamicRoot = anchorNote?.pitchClass ?? currentNotes[0]?.pitchClass ?? 0;
+  const scaleRoot = (settings.globalRoot != null && settings.globalRoot !== "none")
+    ? normalizePc(Number(settings.globalRoot))
+    : dynamicRoot;
   const scaleNotes = (settings.scaleName && settings.scaleName !== "none")
     ? buildScaleNotes(settings.scaleName, scaleRoot)
     : null;
