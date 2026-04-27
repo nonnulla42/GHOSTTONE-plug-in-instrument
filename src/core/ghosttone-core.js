@@ -250,11 +250,9 @@ function normalizeAscending(notes) {
 
 function applyVoicing(notes, slotState, settings, previousNotes, sectionIndex, seed) {
   if (!notes.length) return [];
-  const variation = settings.voicingVariation;
   const continuity = settings.voicingContinuity;
   const rand = makeRandom(seed + sectionIndex * 997 + (slotState.voicingSeed || 0) + 11);
-  const organicShift = variation > 0.05 && rand() < variation * (1 - continuity) ? Math.floor(rand() * notes.length) : 0;
-  const seededShift = slotState.voicingSeed ? Math.floor(rand() * notes.length * Math.max(1, variation * 2)) % notes.length : organicShift;
+  const seededShift = slotState.voicingSeed ? Math.floor(rand() * notes.length * 2) % notes.length : 0;
   const baseShift = settings.voicingStyle === "smooth" && previousNotes?.length ? 0 : seededShift;
   let voiced = normalizeAscending(rotateNotes(notes, baseShift));
 
@@ -266,10 +264,6 @@ function applyVoicing(notes, slotState, settings, previousNotes, sectionIndex, s
     if (settings.voicingStyle === "high") midi += 12;
     if (settings.voicingStyle === "smooth" && previousNotes?.[index]) {
       midi = octaveNear(midi, previousNotes[index].midi);
-    }
-    const variationChance = slotState.voicingSeed ? variation * 0.55 : variation * (1 - continuity) * 0.22;
-    if (variation > 0.05 && rand() < variationChance) {
-      midi += rand() > 0.5 ? 12 : -12;
     }
     return { ...note, midi };
   });
@@ -365,13 +359,6 @@ function buildArpOrder(notes, section, settings, previousSection, seed) {
       return order.find((note) => note.degree === previousNote.degree) || target;
     });
     order = preserveUniqueArpNotes(order, ascending);
-  }
-
-  const organicSeed = seed + Math.round(section.startBeat * 191) + 23;
-  const shuffleSeed = section.slotState.arpSeed || organicSeed;
-  const shuffleAmount = section.slotState.arpSeed ? settings.arpVariation : settings.arpVariation * (1 - settings.arpContinuity) * 0.55;
-  if (shuffleAmount > 0.02) {
-    order = shuffleNotes(order, shuffleSeed, shuffleAmount);
   }
 
   return order.length ? order : ascending;
@@ -677,6 +664,12 @@ function emitEvolveEvents(events, context, previousVoiceEvents) {
   // density: how tightly notes follow each other, driven by harmonic motion
   const densityByMotion = { static: 0.55, subtle: 0.68, evolving: 0.80, restless: 0.92 };
   const density = densityByMotion[settings.harmonicMotion || "subtle"] || 0.68;
+  // variation: melodic interval freedom — 0=stepwise tight, 1=leaps allowed
+  const variation = settings.voicingVariation ?? 0.35;
+  const stepBias = lerp(2.0, 1.0, variation);
+  const midBias  = lerp(1.0, 0.9, variation);
+  const wideBias = lerp(0.5, 0.75, variation);
+  const leapBias = lerp(0.2, 0.8, variation);
 
   // inter-voice shared state: written by each voice after emitting, read by peers
   const sharedVoiceState = notes.map(() => ({ lastInterval: 0, isActiveStrong: false }));
@@ -732,11 +725,11 @@ function emitEvolveEvents(events, context, previousVoiceEvents) {
         const candidateMidi = octaveNear(n.midi ?? n.pc, previousMidi);
         const interval = Math.abs(candidateMidi - previousMidi);
         let weight;
-        if (interval === 0)       weight = 0.8;
-        else if (interval <= 2)   weight = 2.0;
-        else if (interval <= 5)   weight = 1.0;
-        else if (interval <= 9)   weight = 0.5;
-        else                      weight = 0.2;
+        if (interval === 0)       weight = lerp(0.9, 0.6, variation);
+        else if (interval <= 2)   weight = stepBias;
+        else if (interval <= 5)   weight = midBias;
+        else if (interval <= 9)   weight = wideBias;
+        else                      weight = leapBias;
         if (lastInterval > 5 && interval <= 2)              weight *= 1.8; // resolve after own leap
         if (anyPeerLeap && interval <= 2)                   weight *= 1.3; // rule 1: counterweight
         if (anyPeerLeap && interval > 5)                    weight *= 0.6; // rule 1: no double leap
