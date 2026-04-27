@@ -1,11 +1,12 @@
 const DEFAULT_IDEAL_CENTER = Object.freeze({ min: 48, max: 72 });
 
 const SCALE_DEFINITIONS = Object.freeze({
-  major:      Object.freeze([0, 2, 4, 5, 7, 9, 11]),
-  minor:      Object.freeze([0, 2, 3, 5, 7, 8, 10]),
-  dorian:     Object.freeze([0, 2, 3, 5, 7, 9, 10]),
-  mixolydian: Object.freeze([0, 2, 4, 5, 7, 9, 10]),
-  phrygian:   Object.freeze([0, 1, 3, 5, 7, 8, 10]),
+  major:         Object.freeze([0, 2, 4, 5, 7, 9, 11]),
+  minor:         Object.freeze([0, 2, 3, 5, 7, 8, 10]),
+  dorian:        Object.freeze([0, 2, 3, 5, 7, 9, 10]),
+  mixolydian:    Object.freeze([0, 2, 4, 5, 7, 9, 10]),
+  phrygian:      Object.freeze([0, 1, 3, 5, 7, 8, 10]),
+  harmonicMinor: Object.freeze([0, 2, 3, 5, 7, 8, 11]),
 });
 const VOICE_RANGES = Object.freeze([
   Object.freeze({ min: 42, max: 55, center: 48 }),
@@ -263,6 +264,9 @@ function getSimilarityOptions(options = {}) {
   return {
     harmonicDistanceTarget: normalizeDistanceTarget(settings.harmonicDistanceTarget, 1),
     harmonicDistanceFalloff: normalizeFalloff(settings.harmonicDistanceFalloff, 1),
+    localScaleType: settings.localScaleType ?? null,
+    localTargetDegree: Math.max(1, Math.min(11, Math.trunc(Number(settings.localTargetDegree)) || 1)),
+    localDegreeFalloff: Math.max(0, Math.min(3, Math.trunc(Number(settings.localDegreeFalloff ?? 1)) || 1)),
   };
 }
 
@@ -273,14 +277,35 @@ function targetDistance(rawDistance, target) {
 }
 
 export function getNoteSimilarity(a, b, options = {}) {
-  const { harmonicDistanceTarget, harmonicDistanceFalloff } = getSimilarityOptions(options);
+  const { harmonicDistanceTarget, harmonicDistanceFalloff, localScaleType, localTargetDegree, localDegreeFalloff } = getSimilarityOptions(options);
   const distance = normalizePc(Math.abs(normalizePc(a) - normalizePc(b)));
   if (distance === 0) return 1;
-  if (harmonicDistanceTarget === 0) return 0;
 
-  const diff = targetDistance(distance, harmonicDistanceTarget);
+  if (localScaleType && localScaleType !== "chromatic") {
+    const localRoot = options.localRootPitchClass;
+    if (localRoot != null) {
+      const scale = buildScaleNotes(localScaleType, localRoot);
+      if (scale) {
+        const degreeIdx = Math.max(0, Math.min(scale.length - 1, localTargetDegree - 1));
+        const bNorm = normalizePc(b);
+        if (bNorm === scale[degreeIdx]) return 0.5;
+        for (let delta = 1; delta <= localDegreeFalloff; delta++) {
+          const pcLow = scale[(degreeIdx - delta + scale.length) % scale.length];
+          const pcHigh = scale[(degreeIdx + delta) % scale.length];
+          if (bNorm === pcLow || bNorm === pcHigh) return delta === 1 ? 0.25 : 0.1;
+        }
+        return 0;
+      }
+    }
+  }
+
+  // chromatic / legacy path
+  const chromaticTarget = (localScaleType === "chromatic") ? localTargetDegree : harmonicDistanceTarget;
+  const falloff = (localScaleType === "chromatic") ? localDegreeFalloff : harmonicDistanceFalloff;
+  if (chromaticTarget === 0) return 0;
+  const diff = targetDistance(distance, chromaticTarget);
   if (diff === 0) return 0.5;
-  if (harmonicDistanceFalloff > 0 && diff <= harmonicDistanceFalloff) return 0.25;
+  if (falloff > 0 && diff <= falloff) return 0.25;
   return 0;
 }
 
@@ -304,7 +329,11 @@ function enumerateChordVocabulary() {
 }
 
 export function computeChordSimilarityDetails(candidate, current, options = {}) {
-  const currentPcs = normalizeNotes(current).map((note) => note.pitchClass);
+  const currentNotes = normalizeNotes(current);
+  const anchorNote = currentNotes.find((n) => n.role === "anchor");
+  const localRootPitchClass = anchorNote?.pitchClass ?? currentNotes[0]?.pitchClass ?? null;
+  const enrichedOptions = localRootPitchClass != null ? { ...options, localRootPitchClass } : options;
+  const currentPcs = currentNotes.map((note) => note.pitchClass);
   const candidatePcs = (candidate.pitchClasses || normalizeNotes(candidate).map((note) => note.pitchClass)).map(normalizePc);
   const used = new Set();
   let exactMatches = 0;
@@ -315,7 +344,7 @@ export function computeChordSimilarityDetails(candidate, current, options = {}) 
     let best = { index: -1, score: 0 };
     candidatePcs.forEach((candidatePc, index) => {
       if (used.has(index)) return;
-      const score = getNoteSimilarity(pc, candidatePc, options);
+      const score = getNoteSimilarity(pc, candidatePc, enrichedOptions);
       if (score > best.score) best = { index, score };
     });
 
@@ -464,8 +493,21 @@ function getHistoricalRegisterCenter(current, options = {}) {
   return historyCenters.slice(-8).reduce((ema, center) => ema + (center - ema) * alpha, historyCenters[0]);
 }
 
+function effectiveSemitoneTarget(settings) {
+  const { localScaleType } = settings;
+  if (localScaleType && localScaleType !== "chromatic") {
+    const intervals = SCALE_DEFINITIONS[localScaleType];
+    if (intervals) {
+      const degreeIdx = Math.max(0, Math.min(intervals.length - 1, (Number(settings.localTargetDegree) || 1) - 1));
+      return intervals[degreeIdx];
+    }
+  }
+  if (localScaleType === "chromatic") return normalizeDistanceTarget(settings.localTargetDegree ?? 1, 1);
+  return normalizeDistanceTarget(settings.harmonicDistanceTarget, 1);
+}
+
 function directionalMovementWeight(movements, settings = {}) {
-  const target = normalizeDistanceTarget(settings.harmonicDistanceTarget, 1);
+  const target = effectiveSemitoneTarget(settings);
   const highTargetCompensation = target >= 4 && target <= 7;
 
   return movements.reduce((weight, movement) => {

@@ -143,27 +143,36 @@
               </select>
             </label>
             <label class="select-row">
-              <span>Harmonic Distance</span>
-              <select id="harmonicDistanceTarget">
-                <option value="0">0 exact</option>
-                <option value="1" selected>1 semitone</option>
-                <option value="2">2 semitones</option>
-                <option value="3">3 semitones</option>
-                <option value="4">4 semitones</option>
-                <option value="5">5 semitones</option>
-                <option value="6">6 semitones</option>
-                <option value="7">7 semitones</option>
-                <option value="8">8 semitones</option>
-                <option value="9">9 semitones</option>
-                <option value="10">10 semitones</option>
-                <option value="11">11 semitones</option>
+              <span>Local Scale</span>
+              <select id="localScaleType">
+                <option value="chromatic" selected>Chromatic</option>
+                <option value="major">Major</option>
+                <option value="minor">Minor</option>
+                <option value="dorian">Dorian</option>
+                <option value="mixolydian">Mixolydian</option>
+                <option value="phrygian">Phrygian</option>
+                <option value="harmonicMinor">Harmonic Minor</option>
               </select>
             </label>
             <label class="select-row">
-              <span>Distance Focus</span>
-              <select id="harmonicDistanceFalloff">
-                <option value="1" selected>Smooth</option>
+              <span>Target Degree</span>
+              <select id="localTargetDegree">
+                <option value="1" selected>I / 1</option>
+                <option value="2">II / 2</option>
+                <option value="3">III / 3</option>
+                <option value="4">IV / 4</option>
+                <option value="5">V / 5</option>
+                <option value="6">VI / 6</option>
+                <option value="7">VII / 7</option>
+              </select>
+            </label>
+            <label class="select-row">
+              <span>Degree Falloff</span>
+              <select id="localDegreeFalloff">
                 <option value="0">Strict</option>
+                <option value="1" selected>±1</option>
+                <option value="2">±2</option>
+                <option value="3">±3</option>
               </select>
             </label>
             <label class="select-row">
