@@ -22,6 +22,14 @@ const ROLE_WEIGHTS = Object.freeze({
   color: 0.2,
 });
 
+const ROLE_CENTER_WEIGHTS = Object.freeze({
+  anchor: 3.0,
+  support: 1.6,
+  color: 0.8,
+  tension: 0.45,
+  passing: 0.25,
+});
+
 const MOTION_PROFILES = Object.freeze({
   static: Object.freeze({
     similarityTarget: 3.05,
@@ -192,7 +200,17 @@ function average(values) {
 }
 
 function chordCenter(notes) {
-  return average(notes.map((note) => note.midi));
+  if (!notes.length) return 0;
+  const bassMidi = Math.min(...notes.map((n) => n.midi));
+  let total = 0;
+  let weightSum = 0;
+  for (const note of notes) {
+    let w = ROLE_CENTER_WEIGHTS[note.role] ?? 1;
+    if (note.midi === bassMidi) w *= 1.25;
+    total += note.midi * w;
+    weightSum += w;
+  }
+  return total / weightSum;
 }
 
 function chordBass(notes) {
@@ -639,7 +657,9 @@ export function applyVoiceLeading(candidate, current, options = {}) {
 export function computePitchCenterPenalty(voicedChord, current, options = {}) {
   const settings = options.settings || {};
   const profile = MOTION_PROFILES[settings.harmonicMotion || "subtle"] || MOTION_PROFILES.subtle;
-  const ideal = options.idealCenter || DEFAULT_IDEAL_CENTER;
+  const variation = clamp(Number(settings.voicingVariation ?? 0.5), 0, 1);
+  const halfRange = 6 + (18 - 6) * variation;
+  const ideal = options.idealCenter || { min: 60 - halfRange, max: 60 + halfRange };
   const notes = normalizeNotes(voicedChord);
   const previousNotes = normalizeNotes(current);
   const center = chordCenter(notes);
@@ -715,10 +735,8 @@ export function scoreCandidate(candidate, current, options = {}) {
       ? voiced.totalMovement * 0.34
       : -voiced.totalMovement * 0.12;
   const pitchCenterPenalty = computePitchCenterPenalty({ notes: voiced.notes }, current, options);
-  const registerDriftWeight = getRegisterDriftWeight(chordCenter(voiced.notes), getHistoricalRegisterCenter(current, options));
   const directionWeight = directionalMovementWeight(signedMovements, settings);
-  const bassWeight = bassGravityWeight(voiced.notes);
-  const gravityWeight = registerDriftWeight * directionWeight * bassWeight;
+  const gravityWeight = directionWeight;
   const repeatPenalty = repetitionPenalty({ notes: voiced.notes }, options);
   const clusterPenalty = duplicatePitchClasses * 8 + spacingPenalty(voiced.notes) * 0.72;
   const jumpPenalty = largeJumps * 16 + voiced.voiceLeadingPenalty;
@@ -760,9 +778,7 @@ export function scoreCandidate(candidate, current, options = {}) {
     similarityWeight,
     totalMovement: voiced.totalMovement,
     pitchCenterPenalty,
-    registerDriftWeight,
     directionWeight,
-    bassWeight,
     gravityWeight,
     repetitionPenalty: repeatPenalty,
   };
