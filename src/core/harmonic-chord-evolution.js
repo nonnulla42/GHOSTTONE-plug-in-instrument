@@ -39,8 +39,8 @@ const ROLE_CENTER_WEIGHTS = Object.freeze({
 
 const MOTION_PROFILES = Object.freeze({
   static: Object.freeze({
-    similarityTarget: 3.05,
-    similarityFloor: 2,
+    similarityTarget: 3.8,
+    similarityFloor: 2.5,
     similarityWidth: 0.55,
     movementWeight: 1.42,
     centerWeight: 1.55,
@@ -49,8 +49,8 @@ const MOTION_PROFILES = Object.freeze({
     restlessBias: 0,
   }),
   subtle: Object.freeze({
-    similarityTarget: 2.25,
-    similarityFloor: 2,
+    similarityTarget: 2.8,
+    similarityFloor: 2.5,
     similarityWidth: 0.62,
     movementWeight: 1.18,
     centerWeight: 1.24,
@@ -59,8 +59,8 @@ const MOTION_PROFILES = Object.freeze({
     restlessBias: 0.16,
   }),
   evolving: Object.freeze({
-    similarityTarget: 1.85,
-    similarityFloor: 1,
+    similarityTarget: 2.3,
+    similarityFloor: 1.25,
     similarityWidth: 0.82,
     movementWeight: 0.92,
     centerWeight: 1.0,
@@ -69,8 +69,8 @@ const MOTION_PROFILES = Object.freeze({
     restlessBias: 0.36,
   }),
   restless: Object.freeze({
-    similarityTarget: 1.05,
-    similarityFloor: 0.5,
+    similarityTarget: 1.3,
+    similarityFloor: 0.6,
     similarityWidth: 0.78,
     movementWeight: 0.68,
     centerWeight: 0.82,
@@ -304,7 +304,6 @@ function targetDistance(rawDistance, target) {
 export function getNoteSimilarity(a, b, options = {}) {
   const { harmonicDistanceTarget, harmonicDistanceFalloff, localScaleType, localTargetDegree, localDegreeFalloff } = getSimilarityOptions(options);
   const distance = normalizePc(Math.abs(normalizePc(a) - normalizePc(b)));
-  if (distance === 0) return 1;
 
   if (localScaleType && localScaleType !== "chromatic") {
     const localRoot = options.localRootPitchClass;
@@ -313,18 +312,20 @@ export function getNoteSimilarity(a, b, options = {}) {
       if (scale) {
         const degreeIdx = Math.max(0, Math.min(scale.length - 1, localTargetDegree - 1));
         const bNorm = normalizePc(b);
-        if (bNorm === scale[degreeIdx]) return 0.5;
+        const exactMatch = distance === 0 ? 1 : 0;
+        if (bNorm === scale[degreeIdx]) return exactMatch + 1;
         for (let delta = 1; delta <= localDegreeFalloff; delta++) {
           const pcLow = scale[(degreeIdx - delta + scale.length) % scale.length];
           const pcHigh = scale[(degreeIdx + delta) % scale.length];
-          if (bNorm === pcLow || bNorm === pcHigh) return delta === 1 ? 0.25 : 0.1;
+          if (bNorm === pcLow || bNorm === pcHigh) return exactMatch + (delta === 1 ? 0.25 : 0.1);
         }
-        return 0;
+        return exactMatch;
       }
     }
   }
 
-  // chromatic / legacy path
+  // chromatic / legacy path — original behavior, no cumulation
+  if (distance === 0) return 1;
   const chromaticTarget = (localScaleType === "chromatic") ? localTargetDegree : harmonicDistanceTarget;
   const falloff = (localScaleType === "chromatic") ? localDegreeFalloff : harmonicDistanceFalloff;
   if (chromaticTarget === 0) return 0;
