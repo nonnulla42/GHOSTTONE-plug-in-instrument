@@ -41,17 +41,28 @@ function getMotionProfile(harmonicMotion) {
   const h = Math.max(0, Math.min(1, Number(harmonicMotion) || 0));
   const lerp = (a, b) => a + (b - a) * h;
   return {
-    similarityTarget:     lerp(3.7,   0.4),
-    similarityFloor:      lerp(2.5,   0.0),
-    similarityWidth:      lerp(0.5,   1.8),
-    movementWeight:       lerp(1.42,  0.5),
-    centerWeight:         lerp(1.55,  0.7),
+    similarityTarget:     lerp(30.0,  18.0),
+    similarityFloor:      lerp(15.0,   6.0),
+    similarityWidth:      lerp(6.0,   8.0),
+    movementWeight:       lerp(0.42,  1.28),
+    centerWeight:         lerp(0.95,  1.25),
     upwardDriftAllowance: lerp(0.4,   3.0),
-    repetitionWeight:     lerp(1.35,  0.4),
+    repetitionWeight:     lerp(1.4,  1.8),
     restlessBias:         lerp(0.0,   0.8),
-    rootMotionFactor:     lerp(0.54,  0.22),
-    motionAmountFactor:   lerp(-0.12, 0.72),
+    rootMotionFactor:     lerp(0.16,  0.62),
+    motionAmountFactor:   lerp(0.12, -0.56),
   };
+}
+
+function getSimilarityScaleProfile(settings = {}) {
+  const hasLocalScale = settings.localScaleType && settings.localScaleType !== "chromatic";
+  const hasDegreeFalloff = Number(settings.localDegreeFalloff) > 0;
+
+  if (!hasLocalScale || hasDegreeFalloff) {
+    return { targetMultiplier: 1, floorMultiplier: 1 };
+  }
+
+  return { targetMultiplier: 0.4, floorMultiplier: 0.4 };
 }
 
 const CHORD_QUALITIES = Object.freeze([
@@ -75,6 +86,34 @@ function buildScaleNotes(scaleName, root) {
   const intervals = SCALE_DEFINITIONS[scaleName];
   if (!intervals) return null;
   return intervals.map((interval) => normalizePc(root + interval));
+}
+
+function computeGlobalScaleFit(candidate, settings) {
+  if (!settings.scaleName || settings.scaleName === "none") return 0;
+  const globalRootPc = (settings.globalRoot != null && settings.globalRoot !== "none")
+    ? normalizePc(Number(settings.globalRoot))
+    : null;
+  if (globalRootPc === null) return 0;
+  const scaleNotes = buildScaleNotes(settings.scaleName, globalRootPc);
+  if (!scaleNotes) return 0;
+  const pcs = (candidate.pitchClasses || []).map(normalizePc);
+  if (!pcs.length) return 0;
+  return pcs.filter((pc) => scaleNotes.includes(pc)).length / pcs.length;
+}
+
+function hasGlobalScalePreference(settings = {}) {
+  return Boolean(
+    settings.scaleName &&
+    settings.scaleName !== "none" &&
+    settings.globalRoot != null &&
+    settings.globalRoot !== "none",
+  );
+}
+
+function minimumGlobalScaleFit(settings = {}) {
+  const influence = clamp(Number(settings.scaleInfluence) || 0, 0, 1);
+  if (influence <= 0) return 0;
+  return 0.25 + influence * 0.75;
 }
 
 function computeScaleScore(pitchClasses, scaleNotes, root) {
@@ -287,10 +326,10 @@ export function getNoteSimilarity(a, b, options = {}) {
         const degreeIdx = Math.max(0, Math.min(scale.length - 1, localTargetDegree - 1));
         const bNorm = normalizePc(b);
         // delta is in scale degrees: odd=passing tone, even=chord-tone (thirds structure)
-        const DEGREE_FALLOFF_SCORES = [0, 0.15, 0.4, 0.15];
+        const DEGREE_FALLOFF_SCORES = [0, 3, 6, 3];
         const roleScale = options.localScaleRoleWeight ?? 1;
-        const exactMatch = distance === 0 ? 0.5 : 0;
-        if (bNorm === scale[degreeIdx]) return exactMatch + 1 * roleScale;
+        const exactMatch = distance === 0 ? 2.0 : 0;
+        if (bNorm === scale[degreeIdx]) return exactMatch + 10 * roleScale;
         const maxDelta = localDegreeFalloff > 0 ? 3 : 0;
         for (let delta = 1; delta <= maxDelta; delta++) {
           const pcLow = scale[(degreeIdx - delta + scale.length) % scale.length];
@@ -338,10 +377,7 @@ export function computeChordSimilarityDetails(candidate, current, options = {}) 
   const settings = options.settings || {};
   const currentNotes = normalizeNotes(current);
   const anchorNote = currentNotes.find((n) => n.role === "anchor");
-  const globalRootPc = (settings.globalRoot != null && settings.globalRoot !== "none")
-    ? normalizePc(Number(settings.globalRoot))
-    : null;
-  const localRootPitchClass = globalRootPc ?? anchorNote?.pitchClass ?? currentNotes[0]?.pitchClass ?? null;
+  const localRootPitchClass = anchorNote?.pitchClass ?? currentNotes[0]?.pitchClass ?? null;
   const enrichedOptions = localRootPitchClass != null ? { ...options, localRootPitchClass } : options;
   const candidatePcs = (candidate.pitchClasses || normalizeNotes(candidate).map((note) => note.pitchClass)).map(normalizePc);
   const used = new Set();
@@ -396,6 +432,10 @@ export function generateCandidates(current, options = {}) {
   const notes = normalizeNotes(current);
   const candidates = [];
   const seen = new Set();
+  const enforceGlobalScale = hasGlobalScalePreference(settings);
+  const minimumScaleFit = minimumGlobalScaleFit(settings);
+  const similarityStrength = similarityRuleStrength(settings);
+  const motionStrength = movementRuleStrength(settings);
   if (!notes.length) return candidates;
 
   enumerateChordVocabulary()
@@ -404,13 +444,25 @@ export function generateCandidates(current, options = {}) {
       similarity: computeChordSimilarity(candidate, current, { settings }),
       similarityDetails: computeChordSimilarityDetails(candidate, current, { settings }),
       rootDistance: rootDistanceToCurrent(candidate, current),
+      globalScaleFit: enforceGlobalScale ? computeGlobalScaleFit(candidate, settings) : 0,
     }))
     .filter((candidate) => candidate.similarity >= 0.5)
     .filter(hasFourUniquePitchClasses)
+    .filter((candidate) => !enforceGlobalScale || candidate.globalScaleFit >= minimumScaleFit)
     .sort((left, right) => {
       const profile = getMotionProfile(settings.harmonicMotion ?? 0.3);
-      const leftDistance = Math.abs(left.similarity - profile.similarityTarget) + left.rootDistance * 0.035;
-      const rightDistance = Math.abs(right.similarity - profile.similarityTarget) + right.rootDistance * 0.035;
+      const influence = Number(settings.scaleInfluence) || 0;
+      const leftFit = influence > 0 ? left.globalScaleFit : 0;
+      const rightFit = influence > 0 ? right.globalScaleFit : 0;
+      // Global scale always shapes the candidate pool first. Within that pool,
+      // low harmonicMotion leans toward local-scale similarity, while high
+      // harmonicMotion lets root continuity and minimum displacement matter more.
+      const leftSimilarityDistance = Math.abs(left.similarity - profile.similarityTarget) * similarityStrength;
+      const rightSimilarityDistance = Math.abs(right.similarity - profile.similarityTarget) * similarityStrength;
+      const leftMovementDistance = left.rootDistance * (0.02 + motionStrength * 0.08);
+      const rightMovementDistance = right.rootDistance * (0.02 + motionStrength * 0.08);
+      const leftDistance = (leftSimilarityDistance + leftMovementDistance) * (1 + influence * (1 - leftFit) * 2.0);
+      const rightDistance = (rightSimilarityDistance + rightMovementDistance) * (1 + influence * (1 - rightFit) * 2.0);
       return leftDistance - rightDistance;
     })
     .slice(0, 54)
@@ -435,12 +487,15 @@ export function countCommonPitchClasses(candidate, current) {
 
 function harmonicMotionSimilarityWeight(similarity, settings = {}) {
   const profile = getMotionProfile(settings.harmonicMotion ?? 0.3);
-  if (similarity < profile.similarityFloor) {
-    const distanceBelow = profile.similarityFloor - similarity;
+  const similarityScale = getSimilarityScaleProfile(settings);
+  const similarityFloor = profile.similarityFloor * similarityScale.floorMultiplier;
+  const similarityTarget = profile.similarityTarget * similarityScale.targetMultiplier;
+  if (similarity < similarityFloor) {
+    const distanceBelow = similarityFloor - similarity;
     return Math.max(0.06, 0.34 - distanceBelow * 0.22);
   }
 
-  const distanceToTarget = Math.abs(similarity - profile.similarityTarget);
+  const distanceToTarget = Math.abs(similarity - similarityTarget);
   return Math.exp(-(distanceToTarget * distanceToTarget) / (2 * profile.similarityWidth * profile.similarityWidth));
 }
 
@@ -517,15 +572,87 @@ function effectiveSemitoneTarget(settings) {
   return normalizeDistanceTarget(settings.harmonicDistanceTarget, 1);
 }
 
+function getLocalScaleContext(current, settings = {}) {
+  const { localScaleType } = settings;
+  if (!localScaleType || localScaleType === "chromatic") return null;
+
+  const currentNotes = normalizeNotes(current);
+  const anchorNote = currentNotes.find((note) => note.role === "anchor");
+  const localRootPitchClass = anchorNote?.pitchClass ?? currentNotes[0]?.pitchClass ?? null;
+  if (localRootPitchClass == null) return null;
+
+  const scale = buildScaleNotes(localScaleType, localRootPitchClass);
+  if (!scale?.length) return null;
+
+  const degreeIdx = Math.max(0, Math.min(scale.length - 1, (Number(settings.localTargetDegree) || 1) - 1));
+  return {
+    localRootPitchClass,
+    scale,
+    targetPitchClass: scale[degreeIdx],
+    degreeIdx,
+    degreeFalloff: Number(settings.localDegreeFalloff) > 0 ? 2 : 0,
+  };
+}
+
+function scaleDegreeDistance(scale, fromPc, toPc) {
+  const fromIndex = scale.indexOf(normalizePc(fromPc));
+  const toIndex = scale.indexOf(normalizePc(toPc));
+  if (fromIndex < 0 || toIndex < 0) return null;
+
+  const direct = Math.abs(fromIndex - toIndex);
+  return Math.min(direct, scale.length - direct);
+}
+
+function localTargetRuleStrength(settings = {}) {
+  if (!settings.localScaleType || settings.localScaleType === "chromatic") return 0;
+  const harmonicMotion = clamp(Number(settings.harmonicMotion) || 0, 0, 1);
+  return 1 - harmonicMotion;
+}
+
+function movementRuleStrength(settings = {}) {
+  return clamp(Number(settings.harmonicMotion) || 0, 0, 1);
+}
+
+function similarityRuleStrength(settings = {}) {
+  if (!settings.localScaleType || settings.localScaleType === "chromatic") return 1;
+  return 0.15 + localTargetRuleStrength(settings) * 1.1;
+}
+
+function computeLocalTargetRootPreference(candidate, current, settings = {}) {
+  const context = getLocalScaleContext(current, settings);
+  if (!context) return 0;
+
+  const candidateRoot = Number.isFinite(candidate.root)
+    ? normalizePc(candidate.root)
+    : normalizePc(candidate.pitchClasses?.[0] ?? 0);
+  const rootDegreeDistance = scaleDegreeDistance(context.scale, candidateRoot, context.targetPitchClass);
+  const targetContained = candidate.pitchClasses?.some((pc) => normalizePc(pc) === context.targetPitchClass);
+
+  let score = 0;
+  if (rootDegreeDistance === 0) {
+    score += 1;
+  } else if (rootDegreeDistance === 1 && context.degreeFalloff >= 1) {
+    score += 0.55;
+  } else if (rootDegreeDistance === 2 && context.degreeFalloff >= 2) {
+    score += 0.25;
+  }
+
+  if (targetContained) score += 0.25;
+  return score;
+}
+
 function directionalMovementWeight(movements, settings = {}) {
   const target = effectiveSemitoneTarget(settings);
   const highTargetCompensation = target >= 4 && target <= 7;
-
-  return movements.reduce((weight, movement) => {
+  const directionalBias = movements.reduce((weight, movement) => {
     if (movement > 0) return weight * 0.85;
     if (movement < 0) return weight * (highTargetCompensation ? 1.15 : 1.1);
     return weight;
   }, 1);
+  const localStrength = localTargetRuleStrength(settings);
+  const appliedBias = 0.2 + localStrength * 0.8;
+
+  return 1 + (directionalBias - 1) * appliedBias;
 }
 
 function bassGravityWeight(voicedNotes) {
@@ -695,6 +822,7 @@ function repetitionPenalty(voicedChord, options = {}) {
 export function scoreCandidate(candidate, current, options = {}) {
   const settings = options.settings || {};
   const profile = getMotionProfile(settings.harmonicMotion ?? 0.3);
+  const similarityStrength = similarityRuleStrength(settings);
   const commonToneCount = countCommonPitchClasses(candidate, current);
   const similarityDetails = candidate.similarityDetails || computeChordSimilarityDetails(candidate, current, options);
   const similarity = Number.isFinite(candidate.similarity) ? candidate.similarity : similarityDetails.totalScore;
@@ -714,7 +842,7 @@ export function scoreCandidate(candidate, current, options = {}) {
   const stationary = movements.filter((movement) => movement === 0).length;
   const duplicatePitchClasses = voiced.notes.length - new Set(voiced.notes.map((note) => note.pitchClass)).size;
   const similarityWeight = harmonicMotionSimilarityWeight(similarity, settings);
-  const similarityBonus = 36 * similarityWeight + similarity * 7;
+  const similarityBonus = (36 * similarityWeight + similarity * 7.0) * similarityStrength;
   const qualityBonus = (candidate.qualityWeight || 0.6) * 6;
   const rootMotionPenalty = rootDistanceToCurrent(candidate, current) * profile.rootMotionFactor;
   const smoothBonus = Math.max(0, 34 - voiced.totalMovement * 1.7 * profile.movementWeight);
@@ -723,30 +851,24 @@ export function scoreCandidate(candidate, current, options = {}) {
   const pitchCenterPenalty = computePitchCenterPenalty({ notes: voiced.notes }, current, options);
   const directionWeight = directionalMovementWeight(signedMovements, settings);
   const gravityWeight = directionWeight;
+  // Local target-root preference is strongest at low harmonicMotion. As motion
+  // rises, this guidance backs off so the final choice is decided more by the
+  // voiced chord's continuity and movement cost.
+  const localTargetBonus =
+    computeLocalTargetRootPreference(candidate, current, settings) *
+    localTargetRuleStrength(settings) *
+    28;
   const repeatPenalty = repetitionPenalty({ notes: voiced.notes }, options);
   const clusterPenalty = duplicatePitchClasses * 8 + spacingPenalty(voiced.notes) * 0.72;
   const jumpPenalty = largeJumps * 16 + voiced.voiceLeadingPenalty;
-  const currentNotes = normalizeNotes(current);
-  const anchorNote = currentNotes.find((n) => n.role === "anchor");
-  const dynamicRoot = anchorNote?.pitchClass ?? currentNotes[0]?.pitchClass ?? 0;
-  const scaleRoot = (settings.globalRoot != null && settings.globalRoot !== "none")
-    ? normalizePc(Number(settings.globalRoot))
-    : dynamicRoot;
-  const scaleNotes = (settings.scaleName && settings.scaleName !== "none")
-    ? buildScaleNotes(settings.scaleName, scaleRoot)
-    : null;
-  const scaleBias = scaleNotes
-    ? computeScaleScore(candidate.pitchClasses || [], scaleNotes, scaleRoot) * (Number(settings.scaleInfluence) || 0) * 5
-    : 0;
-
   const rawScore =
     3 +
     similarityBonus +
     qualityBonus +
     smoothBonus +
     stepwiseBonus +
-    motionAmountBonus +
-    scaleBias -
+    localTargetBonus +
+    motionAmountBonus -
     rootMotionPenalty -
     pitchCenterPenalty -
     repeatPenalty -
@@ -766,12 +888,14 @@ export function scoreCandidate(candidate, current, options = {}) {
     pitchCenterPenalty,
     directionWeight,
     gravityWeight,
+    localTargetBonus,
     repetitionPenalty: repeatPenalty,
   };
 }
 
 export function generateNextChord(current, options = {}) {
   const random = options.random || Math.random;
+  const settings = options.settings || {};
   const candidates = generateCandidates(current, { ...options, random });
   const scored = candidates
     .map((candidate) => scoreCandidate(candidate, current, options))
@@ -782,10 +906,17 @@ export function generateNextChord(current, options = {}) {
     return { notes };
   }
 
+  const bestScore = Math.max(...scored.map((entry) => entry.score));
+  const localRuleStrength = localTargetRuleStrength(settings);
+  const useLocalRuleWeighting = localRuleStrength > 0;
+  const localChoiceSharpness = 0.02 + localRuleStrength * 0.05;
+
   const selected = weightedChoice(
     scored.map((entry) => ({
       value: entry,
-      weight: Math.pow(entry.score, 1.18),
+      weight: useLocalRuleWeighting
+        ? Math.exp((entry.score - bestScore) * localChoiceSharpness)
+        : Math.pow(entry.score, 1.18),
     })),
     random,
   ) || scored[0];

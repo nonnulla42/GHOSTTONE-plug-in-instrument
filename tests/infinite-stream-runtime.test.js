@@ -14,8 +14,8 @@ const progression = [
 test("extends infinite generation beyond the initial window", () => {
   const settings = {
     generatorMode: "infinite",
-    harmonicMotion: "evolving",
-    mode: "evolve",
+    harmonicMotion: 0.3,
+    mode: "pad",
     harmonyLock: 0.52,
     stayMusical: true,
   };
@@ -37,7 +37,7 @@ test("extends infinite generation beyond the initial window", () => {
 test("streaming infinite extension does not reset to the initial section sequence", () => {
   const settings = {
     generatorMode: "infinite",
-    harmonicMotion: "restless",
+    harmonicMotion: 1,
     mode: "pad",
     harmonyLock: 0.18,
     stayMusical: true,
@@ -59,7 +59,7 @@ test("streaming infinite extension does not reset to the initial section sequenc
 test("events in later chunks keep absolute startBeat values", () => {
   const settings = {
     generatorMode: "infinite",
-    harmonicMotion: "evolving",
+    harmonicMotion: 0.3,
     mode: "arp",
     harmonyLock: 0.45,
     stayMusical: true,
@@ -84,7 +84,7 @@ test("events in later chunks keep absolute startBeat values", () => {
 test("runtime exposes a consumable timeline beyond the template loop", () => {
   const settings = {
     generatorMode: "infinite",
-    harmonicMotion: "subtle",
+    harmonicMotion: 0.3,
     mode: "pad",
     harmonyLock: 0.6,
     stayMusical: true,
@@ -105,8 +105,8 @@ test("runtime exposes a consumable timeline beyond the template loop", () => {
 test("incremental infinite generation is deterministic", () => {
   const settings = {
     generatorMode: "infinite",
-    harmonicMotion: "subtle",
-    mode: "evolve",
+    harmonicMotion: 0.3,
+    mode: "pad",
     harmonyLock: 0.66,
     stayMusical: true,
   };
@@ -135,7 +135,7 @@ test("incremental infinite generation is deterministic", () => {
 test("streaming infinite keeps anchors and avoids collapse across multiple windows", () => {
   const settings = {
     generatorMode: "infinite",
-    harmonicMotion: "evolving",
+    harmonicMotion: 0.3,
     mode: "pad",
     harmonyLock: 0.42,
     stayMusical: true,
@@ -156,14 +156,14 @@ test("streaming infinite keeps anchors and avoids collapse across multiple windo
 test("static long-term motion keeps adjacent chords more similar than restless", () => {
   const staticSettings = {
     generatorMode: "infinite",
-    harmonicMotion: "static",
+    harmonicMotion: 0,
     mode: "pad",
     harmonyLock: 0.88,
     stayMusical: true,
   };
   const restlessSettings = {
     ...staticSettings,
-    harmonicMotion: "restless",
+    harmonicMotion: 1,
     harmonyLock: 0.18,
   };
   const staticPattern = generatePattern(staticSettings, progression, 7005);

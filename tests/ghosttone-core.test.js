@@ -55,9 +55,9 @@ test("parseChord returns chord tones with roles", () => {
   assert.deepEqual(
     chord.notes.map((note) => [note.name, note.degree, note.role]),
     [
-      ["A", "1", "stable"],
+      ["A", "1", "anchor"],
       ["C", "3", "color"],
-      ["E", "5", "stable"],
+      ["E", "5", "color"],
       ["B", "9", "tension"],
     ],
   );
@@ -65,7 +65,7 @@ test("parseChord returns chord tones with roles", () => {
 
 test("generatePattern is deterministic for identical inputs", () => {
   const settings = {
-    mode: "evolve",
+    mode: "pad",
     ghostAmount: 0.62,
     drift: 0.41,
     harmonyLock: 0.7,
@@ -165,7 +165,7 @@ test("role-based generator emits harmonic roles and carry metadata", () => {
 test("role-based generator stays deterministic with same seed", () => {
   const settings = {
     generatorMode: "roleBased",
-    mode: "evolve",
+    mode: "pad",
     ghostAmount: 0.7,
     drift: 0.42,
     harmonyLock: 0.6,
@@ -182,8 +182,8 @@ test("role-based generator stays deterministic with same seed", () => {
 test("infinite generator evolves sections deterministically and preserves anchors", () => {
   const settings = {
     generatorMode: "infinite",
-    harmonicMotion: "evolving",
-    mode: "evolve",
+    harmonicMotion: 0.3,
+    mode: "pad",
     ghostAmount: 0.72,
     drift: 0.38,
     harmonyLock: 0.52,
@@ -222,13 +222,13 @@ test("pad mode emits one full-section event per harmonic voice", () => {
   });
 });
 
-test("arp mode uses uniform step durations without per-voice overlap", () => {
+test("arp mode keeps ordered offsets without per-voice overlap", () => {
   const result = generatePattern({
     generatorMode: "infinite",
     mode: "arp",
     arpDensity: 0.75,
     arpFeel: "syncopated",
-    harmonicMotion: "subtle",
+    harmonicMotion: 0.3,
     harmonyLock: 0.68,
     stayMusical: true,
     ghostEnabled: false,
@@ -236,32 +236,40 @@ test("arp mode uses uniform step durations without per-voice overlap", () => {
 
   result.sections.forEach((section, sectionIndex) => {
     const events = sectionEvents(result, sectionIndex).sort((left, right) => left.startBeat - right.startBeat);
-    const expectedDuration = section.durationBeats / events.length;
 
     events.forEach((event, index) => {
-      assert.ok(Math.abs(event.durationBeats - expectedDuration) < 1e-9);
-      assert.ok(Math.abs(event.startBeat - (section.startBeat + index * expectedDuration)) < 1e-9);
+      assert.ok(event.durationBeats > 0);
+      assert.ok(event.startBeat >= section.startBeat);
+      assert.ok(event.startBeat < section.startBeat + section.durationBeats);
+      if (index > 0) {
+        assert.ok(event.startBeat >= events[index - 1].startBeat);
+      }
     });
     assertNoVoiceOverlaps(events);
   });
 });
 
-test("evolve mode keeps each harmonic voice monophonic", () => {
+test("full global scale influence keeps infinite pad harmony inside the chosen scale", () => {
   const result = generatePattern({
     generatorMode: "infinite",
-    mode: "evolve",
-    harmonicMotion: "evolving",
+    mode: "pad",
+    harmonicMotion: 0.3,
     harmonyLock: 0.52,
     stayMusical: true,
     ghostEnabled: false,
+    globalRoot: "0",
+    scaleName: "major",
+    scaleInfluence: 1,
   }, cmaj7Progression(), 13012);
+  const majorScale = new Set([0, 2, 4, 5, 7, 9, 11]);
 
   result.sections.forEach((section, sectionIndex) => {
     const events = sectionEvents(result, sectionIndex);
     const voiceIds = new Set(section.notes.map((note) => note.voiceId));
 
-    assert.ok(events.length >= section.notes.length);
+    assert.equal(events.length, section.notes.length);
     assert.ok(events.every((event) => voiceIds.has(event.voiceId)));
+    assert.ok(section.notes.every((note) => majorScale.has(note.pc)));
     assertNoVoiceOverlaps(events);
   });
 });
@@ -269,7 +277,7 @@ test("evolve mode keeps each harmonic voice monophonic", () => {
 test("infinite arp events preserve each section chord tone", () => {
   const result = generatePattern({
     generatorMode: "infinite",
-    harmonicMotion: "subtle",
+    harmonicMotion: 0.3,
     harmonicDistanceTarget: 4,
     mode: "arp",
     arpDensity: 0.7,
@@ -291,7 +299,7 @@ test("infinite arp events preserve each section chord tone", () => {
 test("infinite arp events avoid upward register ratcheting", () => {
   const result = generatePattern({
     generatorMode: "infinite",
-    harmonicMotion: "subtle",
+    harmonicMotion: 0.3,
     harmonicDistanceTarget: 9,
     mode: "arp",
     arpDensity: 0.75,

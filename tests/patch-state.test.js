@@ -54,7 +54,7 @@ test("normalizes unsafe patch values", () => {
   assert.equal(restored.slots.B.bpm, 240);
   assert.equal(restored.slots.B.mode, "pad");
   assert.equal(restored.slots.B.core.generatorMode, "classic");
-  assert.equal(restored.slots.B.core.harmonicMotion, "subtle");
+  assert.equal(restored.slots.B.core.harmonicMotion, 30);
   assert.equal(restored.slots.B.core.harmonicDistanceTarget, 1);
   assert.equal(restored.slots.B.core.harmonicDistanceFalloff, 1);
   assert.equal(restored.slots.B.core.ghostAmount, 100);
@@ -68,7 +68,7 @@ test("applies a preset to the active compare slot", () => {
 
   assert.equal(updated.activeCompareSlot, "B");
   assert.equal(updated.slots.B.name, "Dark Drift");
-  assert.equal(updated.slots.B.mode, "evolve");
+  assert.equal(updated.slots.B.mode, "pad");
   assert.equal(updated.slots.A.name, "Slot A");
 });
 
@@ -86,7 +86,7 @@ test("patch conversion feeds core, progression, and sound adapters", () => {
 
   assert.equal(patchToCoreSettings(patch).ghostAmount, 0.48);
   assert.equal(patchToCoreSettings(patch).generatorMode, "classic");
-  assert.equal(patchToCoreSettings(patch).harmonicMotion, "subtle");
+  assert.equal(patchToCoreSettings(patch).harmonicMotion, 0.3);
   assert.equal(patchToCoreSettings(patch).harmonicDistanceTarget, 1);
   assert.equal(patchToCoreSettings(patch).mode, "pad");
   assert.equal(patchToSoundSettings(patch).space, 0.18);
@@ -101,12 +101,12 @@ test("patch conversion preserves role-based generator mode", () => {
     core: {
       ...createDefaultPatch().core,
       generatorMode: "roleBased",
-      harmonicMotion: "restless",
+      harmonicMotion: 100,
     },
   });
 
   assert.equal(patchToCoreSettings(patch).generatorMode, "roleBased");
-  assert.equal(patchToCoreSettings(patch).harmonicMotion, "restless");
+  assert.equal(patchToCoreSettings(patch).harmonicMotion, 1);
 });
 
 test("patch conversion preserves harmonic distance controls", () => {
@@ -116,12 +116,16 @@ test("patch conversion preserves harmonic distance controls", () => {
       generatorMode: "infinite",
       harmonicDistanceTarget: 7,
       harmonicDistanceFalloff: 2,
+      localScaleType: "harmonicMinor",
+      scaleName: "harmonicMinor",
     },
   });
 
   assert.equal(patch.core.harmonicDistanceTarget, 7);
   assert.equal(patchToCoreSettings(patch).harmonicDistanceTarget, 7);
   assert.equal(patchToCoreSettings(patch).harmonicDistanceFalloff, 2);
+  assert.equal(patchToCoreSettings(patch).localScaleType, "harmonicMinor");
+  assert.equal(patchToCoreSettings(patch).scaleName, "harmonicMinor");
 });
 
 test("split bars include the second chord slot in progression conversion", () => {
