@@ -133,14 +133,10 @@
               <button class="generator-segment" data-generator-mode="roleBased" type="button">Role-based</button>
               <button class="generator-segment" data-generator-mode="infinite" type="button">Infinite</button>
             </div>
-            <label class="select-row">
+            <label class="slider-row compact">
               <span>Harmonic Motion</span>
-              <select id="harmonicMotion">
-                <option value="static">Static</option>
-                <option value="subtle" selected>Subtle</option>
-                <option value="evolving">Evolving</option>
-                <option value="restless">Restless</option>
-              </select>
+              <strong id="harmonicMotionValue">30</strong>
+              <input id="harmonicMotion" type="range" min="0" max="100" step="1" value="30" />
             </label>
             <label class="select-row">
               <span>Local Scale</span>
@@ -166,14 +162,9 @@
                 <option value="7">VII / 7</option>
               </select>
             </label>
-            <label class="select-row">
+            <label class="toggle-row">
+              <input id="localDegreeFalloff" type="checkbox" checked />
               <span>Degree Falloff</span>
-              <select id="localDegreeFalloff">
-                <option value="0">Strict</option>
-                <option value="1" selected>±1</option>
-                <option value="2">±2</option>
-                <option value="3">±3</option>
-              </select>
             </label>
             <label class="select-row">
               <span>Global Root</span>

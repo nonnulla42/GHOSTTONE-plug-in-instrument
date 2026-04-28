@@ -37,48 +37,22 @@ const ROLE_CENTER_WEIGHTS = Object.freeze({
   passing: 0.25,
 });
 
-const MOTION_PROFILES = Object.freeze({
-  static: Object.freeze({
-    similarityTarget: 3.8,
-    similarityFloor: 2.5,
-    similarityWidth: 0.55,
-    movementWeight: 1.42,
-    centerWeight: 1.55,
-    upwardDriftAllowance: 0.4,
-    repetitionWeight: 1.35,
-    restlessBias: 0,
-  }),
-  subtle: Object.freeze({
-    similarityTarget: 2.8,
-    similarityFloor: 2.5,
-    similarityWidth: 0.62,
-    movementWeight: 1.18,
-    centerWeight: 1.24,
-    upwardDriftAllowance: 0.9,
-    repetitionWeight: 1.1,
-    restlessBias: 0.16,
-  }),
-  evolving: Object.freeze({
-    similarityTarget: 2.3,
-    similarityFloor: 1.25,
-    similarityWidth: 0.82,
-    movementWeight: 0.92,
-    centerWeight: 1.0,
-    upwardDriftAllowance: 1.5,
-    repetitionWeight: 0.86,
-    restlessBias: 0.36,
-  }),
-  restless: Object.freeze({
-    similarityTarget: 1.3,
-    similarityFloor: 0.6,
-    similarityWidth: 0.78,
-    movementWeight: 0.68,
-    centerWeight: 0.82,
-    upwardDriftAllowance: 2.2,
-    repetitionWeight: 0.62,
-    restlessBias: 0.62,
-  }),
-});
+function getMotionProfile(harmonicMotion) {
+  const h = Math.max(0, Math.min(1, Number(harmonicMotion) || 0));
+  const lerp = (a, b) => a + (b - a) * h;
+  return {
+    similarityTarget:     lerp(3.7,   0.4),
+    similarityFloor:      lerp(2.5,   0.0),
+    similarityWidth:      lerp(0.5,   1.8),
+    movementWeight:       lerp(1.42,  0.5),
+    centerWeight:         lerp(1.55,  0.7),
+    upwardDriftAllowance: lerp(0.4,   3.0),
+    repetitionWeight:     lerp(1.35,  0.4),
+    restlessBias:         lerp(0.0,   0.8),
+    rootMotionFactor:     lerp(0.54,  0.22),
+    motionAmountFactor:   lerp(-0.12, 0.72),
+  };
+}
 
 const CHORD_QUALITIES = Object.freeze([
   Object.freeze({ name: "maj7", intervals: Object.freeze([0, 4, 7, 11]), weight: 1 }),
@@ -312,12 +286,15 @@ export function getNoteSimilarity(a, b, options = {}) {
       if (scale) {
         const degreeIdx = Math.max(0, Math.min(scale.length - 1, localTargetDegree - 1));
         const bNorm = normalizePc(b);
-        const exactMatch = distance === 0 ? 1 : 0;
+        // delta is in scale degrees: odd=passing tone, even=chord-tone (thirds structure)
+        const DEGREE_FALLOFF_SCORES = [0, 0.15, 0.4, 0.15];
+        const exactMatch = distance === 0 ? 0.5 : 0;
         if (bNorm === scale[degreeIdx]) return exactMatch + 1;
-        for (let delta = 1; delta <= localDegreeFalloff; delta++) {
+        const maxDelta = localDegreeFalloff > 0 ? 3 : 0;
+        for (let delta = 1; delta <= maxDelta; delta++) {
           const pcLow = scale[(degreeIdx - delta + scale.length) % scale.length];
           const pcHigh = scale[(degreeIdx + delta) % scale.length];
-          if (bNorm === pcLow || bNorm === pcHigh) return exactMatch + (delta === 1 ? 0.25 : 0.1);
+          if (bNorm === pcLow || bNorm === pcHigh) return exactMatch + (DEGREE_FALLOFF_SCORES[delta] ?? 0);
         }
         return exactMatch;
       }
@@ -423,7 +400,7 @@ export function generateCandidates(current, options = {}) {
     .filter((candidate) => candidate.similarity >= 0.5)
     .filter(hasFourUniquePitchClasses)
     .sort((left, right) => {
-      const profile = MOTION_PROFILES[settings.harmonicMotion || "subtle"] || MOTION_PROFILES.subtle;
+      const profile = getMotionProfile(settings.harmonicMotion ?? 0.3);
       const leftDistance = Math.abs(left.similarity - profile.similarityTarget) + left.rootDistance * 0.035;
       const rightDistance = Math.abs(right.similarity - profile.similarityTarget) + right.rootDistance * 0.035;
       return leftDistance - rightDistance;
@@ -449,7 +426,7 @@ export function countCommonPitchClasses(candidate, current) {
 }
 
 function harmonicMotionSimilarityWeight(similarity, settings = {}) {
-  const profile = MOTION_PROFILES[settings.harmonicMotion || "subtle"] || MOTION_PROFILES.subtle;
+  const profile = getMotionProfile(settings.harmonicMotion ?? 0.3);
   if (similarity < profile.similarityFloor) {
     const distanceBelow = profile.similarityFloor - similarity;
     return Math.max(0.06, 0.34 - distanceBelow * 0.22);
@@ -665,7 +642,7 @@ export function applyVoiceLeading(candidate, current, options = {}) {
 
 export function computePitchCenterPenalty(voicedChord, current, options = {}) {
   const settings = options.settings || {};
-  const profile = MOTION_PROFILES[settings.harmonicMotion || "subtle"] || MOTION_PROFILES.subtle;
+  const profile = getMotionProfile(settings.harmonicMotion ?? 0.3);
   const variation = clamp(Number(settings.voicingVariation ?? 0.5), 0, 1);
   const halfRange = 6 + (18 - 6) * variation;
   const registerCenter = Number(settings.registerCenter ?? 60);
@@ -682,7 +659,7 @@ export function computePitchCenterPenalty(voicedChord, current, options = {}) {
 
 function repetitionPenalty(voicedChord, options = {}) {
   const settings = options.settings || {};
-  const profile = MOTION_PROFILES[settings.harmonicMotion || "subtle"] || MOTION_PROFILES.subtle;
+  const profile = getMotionProfile(settings.harmonicMotion ?? 0.3);
   const history = Array.isArray(options.history) ? options.history.slice(-4) : [];
   if (!history.length) return 0;
 
@@ -706,7 +683,7 @@ function repetitionPenalty(voicedChord, options = {}) {
 
 export function scoreCandidate(candidate, current, options = {}) {
   const settings = options.settings || {};
-  const profile = MOTION_PROFILES[settings.harmonicMotion || "subtle"] || MOTION_PROFILES.subtle;
+  const profile = getMotionProfile(settings.harmonicMotion ?? 0.3);
   const commonToneCount = countCommonPitchClasses(candidate, current);
   const similarityDetails = candidate.similarityDetails || computeChordSimilarityDetails(candidate, current, options);
   const similarity = Number.isFinite(candidate.similarity) ? candidate.similarity : similarityDetails.totalScore;
@@ -728,14 +705,10 @@ export function scoreCandidate(candidate, current, options = {}) {
   const similarityWeight = harmonicMotionSimilarityWeight(similarity, settings);
   const similarityBonus = 36 * similarityWeight + similarity * 7;
   const qualityBonus = (candidate.qualityWeight || 0.6) * 6;
-  const rootMotionPenalty = rootDistanceToCurrent(candidate, current) * (settings.harmonicMotion === "restless" ? 0.26 : 0.54);
+  const rootMotionPenalty = rootDistanceToCurrent(candidate, current) * profile.rootMotionFactor;
   const smoothBonus = Math.max(0, 34 - voiced.totalMovement * 1.7 * profile.movementWeight);
   const stepwiseBonus = smallMoves * (5 + profile.restlessBias * 2) + stationary * (1.8 - profile.restlessBias);
-  const motionAmountBonus = settings.harmonicMotion === "restless"
-    ? voiced.totalMovement * 0.72
-    : settings.harmonicMotion === "evolving"
-      ? voiced.totalMovement * 0.34
-      : -voiced.totalMovement * 0.12;
+  const motionAmountBonus = voiced.totalMovement * profile.motionAmountFactor;
   const pitchCenterPenalty = computePitchCenterPenalty({ notes: voiced.notes }, current, options);
   const directionWeight = directionalMovementWeight(signedMovements, settings);
   const gravityWeight = directionWeight;

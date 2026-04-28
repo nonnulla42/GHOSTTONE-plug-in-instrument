@@ -22,6 +22,7 @@ export function getElements(root = document) {
     harmonyLock: root.querySelector("#harmonyLock"),
     colorMode: root.querySelector("#colorMode"),
     harmonicMotion: root.querySelector("#harmonicMotion"),
+    harmonicMotionValue: root.querySelector("#harmonicMotionValue"),
     localScaleType: root.querySelector("#localScaleType"),
     localTargetDegree: root.querySelector("#localTargetDegree"),
     localDegreeFalloff: root.querySelector("#localDegreeFalloff"),
@@ -98,10 +99,10 @@ export function readCoreSettings(els, mode, generatorMode = "classic") {
     drift: Number(els.drift.value) / 100,
     harmonyLock: Number(els.harmonyLock.value) / 100,
     colorMode: els.colorMode.value,
-    harmonicMotion: els.harmonicMotion.value,
+    harmonicMotion: Number(els.harmonicMotion.value),
     localScaleType: els.localScaleType?.value ?? "chromatic",
     localTargetDegree: Number(els.localTargetDegree?.value ?? 1),
-    localDegreeFalloff: Number(els.localDegreeFalloff?.value ?? 1),
+    localDegreeFalloff: els.localDegreeFalloff?.checked ? 1 : 0,
     stayMusical: els.stayMusical.checked,
     ghostEnabled: els.ghostEnabled.checked,
     voicingStyle: els.voicingStyle.value,
@@ -214,6 +215,7 @@ export function updateReadouts(els, pattern, settings, bpm, soundSettings, curre
   if (els.scaleInfluenceValue) els.scaleInfluenceValue.textContent = Math.round((settings.scaleInfluence ?? 0) * 100);
   if (els.memoryStrengthValue) els.memoryStrengthValue.textContent = Math.round((settings.memoryStrength ?? 0.5) * 100);
   if (els.registerCenterValue) els.registerCenterValue.textContent = midiToNoteName(settings.registerCenter ?? 60);
+  if (els.harmonicMotionValue) els.harmonicMotionValue.textContent = Math.round((settings.harmonicMotion ?? 0.3) * 100);
   if (els.reverbMixValue) els.reverbMixValue.textContent = Math.round((soundSettings.reverbMix ?? 0) * 100);
   if (els.delayMixValue) els.delayMixValue.textContent = Math.round((soundSettings.delayMix ?? 0) * 100);
   els.rangeReadout.textContent = `+/-${Math.round(maxOffset)} cents`;

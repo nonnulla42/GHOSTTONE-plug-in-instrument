@@ -5,36 +5,17 @@ const noteNames = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "
 const COLOR_INTERVALS = [3, 4, 7, 9];
 const TENSION_INTERVALS = [1, 2, 5, 6, 8, 10, 11];
 
-export const HARMONIC_MOTION_PROFILES = Object.freeze({
-  static: Object.freeze({
-    changeProbability: 0.18,
-    maxChangingVoices: 1,
-    leapMultiplier: 0.2,
-    rootPull: 0.9,
-    preserveCenter: 0.9,
-  }),
-  subtle: Object.freeze({
-    changeProbability: 0.32,
-    maxChangingVoices: 2,
-    leapMultiplier: 0.42,
-    rootPull: 0.75,
-    preserveCenter: 0.72,
-  }),
-  evolving: Object.freeze({
-    changeProbability: 0.5,
-    maxChangingVoices: 3,
-    leapMultiplier: 0.7,
-    rootPull: 0.56,
-    preserveCenter: 0.52,
-  }),
-  restless: Object.freeze({
-    changeProbability: 0.72,
-    maxChangingVoices: 4,
-    leapMultiplier: 1,
-    rootPull: 0.36,
-    preserveCenter: 0.28,
-  }),
-});
+function getHarmonicMotionProfile(harmonicMotion) {
+  const h = Math.max(0, Math.min(1, Number(harmonicMotion) || 0));
+  const lerp = (a, b) => a + (b - a) * h;
+  return {
+    changeProbability: lerp(0.18, 0.72),
+    maxChangingVoices: lerp(1, 4),
+    leapMultiplier:    lerp(0.2, 1.0),
+    rootPull:          lerp(0.9, 0.3),
+    preserveCenter:    lerp(0.9, 0.2),
+  };
+}
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -348,7 +329,7 @@ export function evolveHarmonicState(previousState, options = {}) {
 
   const settings = options.settings || {};
   const history = Array.isArray(options.history) ? options.history : [];
-  const profile = HARMONIC_MOTION_PROFILES[settings.harmonicMotion || "subtle"] || HARMONIC_MOTION_PROFILES.subtle;
+  const profile = getHarmonicMotionProfile(settings.harmonicMotion ?? 0.3);
   const chordState = {
     notes: previousState.voices.map((voice) => ({
       pitchClass: voice.pc,

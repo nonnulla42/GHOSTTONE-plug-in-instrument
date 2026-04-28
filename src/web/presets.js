@@ -137,7 +137,7 @@ export const PRESETS = [
     chords: ["Amaj7", "F#m9", "Dmaj9", "Bm7"],
     core: {
       generatorMode: "infinite",
-      harmonicMotion: "static",
+      harmonicMotion: 5,
       ghostAmount: 52,
       drift: 42,
       harmonyLock: 74,
@@ -174,7 +174,7 @@ export const PRESETS = [
     chords: ["Em9", "Cmaj7", "G6", "Dsus4"],
     core: {
       generatorMode: "infinite",
-      harmonicMotion: "evolving",
+      harmonicMotion: 55,
       ghostAmount: 38,
       drift: 28,
       harmonyLock: 60,
@@ -211,7 +211,7 @@ export const PRESETS = [
     chords: ["Dm9", "Bbmaj7", "Gm9", "Cm7"],
     core: {
       generatorMode: "infinite",
-      harmonicMotion: "subtle",
+      harmonicMotion: 30,
       ghostAmount: 58,
       drift: 52,
       harmonyLock: 56,

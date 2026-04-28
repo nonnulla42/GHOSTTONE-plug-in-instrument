@@ -20,7 +20,7 @@ export const DEFAULT_PATCH = Object.freeze({
   ]),
   core: Object.freeze({
     generatorMode: "classic",
-    harmonicMotion: "subtle",
+    harmonicMotion: 30,
     harmonicDistanceTarget: 1,
     harmonicDistanceFalloff: 1,
     localScaleType: "chromatic",
@@ -139,7 +139,7 @@ export function patchToCoreSettings(patch) {
   const normalized = normalizePatch(patch);
   return {
     generatorMode: normalized.core.generatorMode,
-    harmonicMotion: normalized.core.harmonicMotion,
+    harmonicMotion: normalized.core.harmonicMotion / 100,
     harmonicDistanceTarget: normalized.core.harmonicDistanceTarget,
     harmonicDistanceFalloff: normalized.core.harmonicDistanceFalloff,
     localScaleType: normalized.core.localScaleType,
@@ -255,12 +255,12 @@ export function clonePatchState(state) {
 function normalizeCore(core = {}) {
   return {
     generatorMode: ["classic", "roleBased", "infinite"].includes(core.generatorMode) ? core.generatorMode : DEFAULT_PATCH.core.generatorMode,
-    harmonicMotion: ["static", "subtle", "evolving", "restless"].includes(core.harmonicMotion) ? core.harmonicMotion : DEFAULT_PATCH.core.harmonicMotion,
+    harmonicMotion: clampNumber(core.harmonicMotion, 0, 100, DEFAULT_PATCH.core.harmonicMotion),
     harmonicDistanceTarget: normalizeInt(core.harmonicDistanceTarget, DEFAULT_PATCH.core.harmonicDistanceTarget, 0) % 12,
     harmonicDistanceFalloff: clampNumber(core.harmonicDistanceFalloff, 0, 6, DEFAULT_PATCH.core.harmonicDistanceFalloff),
     localScaleType: ["chromatic", "major", "minor", "dorian", "mixolydian", "phrygian", "harmonicMinor"].includes(core.localScaleType) ? core.localScaleType : DEFAULT_PATCH.core.localScaleType,
     localTargetDegree: clampNumber(Math.round(Number(core.localTargetDegree)), 1, 11, DEFAULT_PATCH.core.localTargetDegree),
-    localDegreeFalloff: clampNumber(Math.round(Number(core.localDegreeFalloff)), 0, 3, DEFAULT_PATCH.core.localDegreeFalloff),
+    localDegreeFalloff: Number(core.localDegreeFalloff) > 0 ? 1 : 0,
     ghostAmount: clampNumber(core.ghostAmount, 0, 100, DEFAULT_PATCH.core.ghostAmount),
     drift: clampNumber(core.drift, 0, 100, DEFAULT_PATCH.core.drift),
     harmonyLock: clampNumber(core.harmonyLock, 0, 100, DEFAULT_PATCH.core.harmonyLock),

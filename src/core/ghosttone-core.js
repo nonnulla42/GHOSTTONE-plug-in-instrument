@@ -45,7 +45,7 @@ const roleIntensity = {
 
 export const defaultSettings = Object.freeze({
   generatorMode: "classic",
-  harmonicMotion: "subtle",
+  harmonicMotion: 0.3,
   harmonicDistanceTarget: 1,
   harmonicDistanceFalloff: 1,
   mode: "pad",
@@ -115,7 +115,7 @@ function normalizeSettings(settings = {}) {
   return {
     ...merged,
     generatorMode: ["classic", "roleBased", "infinite"].includes(merged.generatorMode) ? merged.generatorMode : defaultSettings.generatorMode,
-    harmonicMotion: ["static", "subtle", "evolving", "restless"].includes(merged.harmonicMotion) ? merged.harmonicMotion : defaultSettings.harmonicMotion,
+    harmonicMotion: (Number.isFinite(Number(merged.harmonicMotion)) ? Math.max(0, Math.min(1, Number(merged.harmonicMotion))) : defaultSettings.harmonicMotion),
     harmonicDistanceTarget: normalizeDistanceTarget(merged.harmonicDistanceTarget, defaultSettings.harmonicDistanceTarget),
     harmonicDistanceFalloff: normalizeDistanceFalloff(merged.harmonicDistanceFalloff, defaultSettings.harmonicDistanceFalloff),
     mode: ["pad", "arp", "evolve"].includes(merged.mode) ? merged.mode : defaultSettings.mode,
@@ -662,8 +662,7 @@ function emitEvolveEvents(events, context, previousVoiceEvents) {
   const STREAM_ID = 0;
   const MIN_GAP = 0.015;
   const stepDuration = section.durationBeats / 16;
-  const densityByMotion = { static: 0.55, subtle: 0.68, evolving: 0.80, restless: 0.92 };
-  const density = densityByMotion[settings.harmonicMotion || "subtle"] || 0.68;
+  const density = 0.55 + (settings.harmonicMotion ?? 0.3) * 0.37;
   const variation = settings.voicingVariation ?? 0.35;
   const stepBias = lerp(2.0, 1.0, variation);
   const midBias  = lerp(1.0, 0.9, variation);
