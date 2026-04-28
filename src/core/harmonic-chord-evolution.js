@@ -8,12 +8,19 @@ const SCALE_DEFINITIONS = Object.freeze({
   phrygian:      Object.freeze([0, 1, 3, 5, 7, 8, 10]),
   harmonicMinor: Object.freeze([0, 2, 3, 5, 7, 8, 11]),
 });
-const VOICE_RANGES = Object.freeze([
-  Object.freeze({ min: 42, max: 55, center: 48 }),
-  Object.freeze({ min: 48, max: 62, center: 55 }),
-  Object.freeze({ min: 53, max: 69, center: 60 }),
-  Object.freeze({ min: 57, max: 76, center: 67 }),
-]);
+function getVoiceRanges(registerCenter) {
+  // offsets and spans relative to registerCenter (at rc=60 produces original values)
+  const voices = [
+    { offset: -12, below: 6,  above: 7 },
+    { offset:  -5, below: 7,  above: 7 },
+    { offset:   0, below: 7,  above: 9 },
+    { offset:   7, below: 10, above: 9 },
+  ];
+  return voices.map(({ offset, below, above }) => {
+    const center = registerCenter + offset;
+    return { min: center - below, max: center + above, center };
+  });
+}
 
 const ROLE_WEIGHTS = Object.freeze({
   anchor: 0.8,
@@ -589,12 +596,13 @@ export function applyVoiceLeading(candidate, current, options = {}) {
   }
   const pitchClasses = candidate.pitchClasses.map(normalizePc);
   const permutations = permute(pitchClasses);
+  const voiceRanges = getVoiceRanges(Number(options.settings?.registerCenter ?? 60));
   let best = null;
 
   permutations.forEach((permutation) => {
     const voicedNotes = permutation.map((pc, index) => {
       const previous = previousNotes[index] || previousNotes[previousNotes.length - 1];
-      const range = VOICE_RANGES[index] || VOICE_RANGES[VOICE_RANGES.length - 1];
+      const range = voiceRanges[index] || voiceRanges[voiceRanges.length - 1];
       const midi = blendedVoiceTarget({
         candidate,
         pitchClasses,
@@ -626,7 +634,7 @@ export function applyVoiceLeading(candidate, current, options = {}) {
       return sum + (note.movement - 7) * (note.movement - 7) * 1.2;
     }, 0);
     const rangePenalty = voicedNotes.reduce((sum, note, index) => {
-      const range = VOICE_RANGES[index] || VOICE_RANGES[VOICE_RANGES.length - 1];
+      const range = voiceRanges[index] || voiceRanges[voiceRanges.length - 1];
       const below = Math.max(0, range.min - note.midi);
       const above = Math.max(0, note.midi - range.max);
       const centerDistance = Math.abs(note.midi - range.center);

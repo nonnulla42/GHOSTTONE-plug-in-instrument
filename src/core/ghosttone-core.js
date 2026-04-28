@@ -30,14 +30,14 @@ const noteMap = {
 const noteNames = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 
 const colorProfiles = {
-  warm: { bias: -1, stable: 0.65, color: 0.82, tension: 0.72, passing: 0.52 },
-  dreamy: { bias: 1, stable: 0.72, color: 1.0, tension: 0.92, passing: 0.7 },
-  dark: { bias: -1, stable: 0.72, color: 0.9, tension: 1.12, passing: 0.84 },
-  alien: { bias: 1, stable: 0.9, color: 1.2, tension: 1.55, passing: 1.35 },
+  warm: { bias: -1, anchor: 0.65, color: 0.82, tension: 0.72, passing: 0.52 },
+  dreamy: { bias: 1, anchor: 0.72, color: 1.0, tension: 0.92, passing: 0.7 },
+  dark: { bias: -1, anchor: 0.72, color: 0.9, tension: 1.12, passing: 0.84 },
+  alien: { bias: 1, anchor: 0.9, color: 1.2, tension: 1.55, passing: 1.35 },
 };
 
 const roleIntensity = {
-  stable: { range: [0, 14], chance: [0.08, 0.48] },
+  anchor: { range: [0, 14], chance: [0.08, 0.48] },
   color: { range: [4, 38], chance: [0.2, 0.78] },
   tension: { range: [8, 62], chance: [0.34, 0.92] },
   passing: { range: [6, 46], chance: [0.26, 0.86] },
@@ -187,7 +187,7 @@ export function parseChord(input) {
   const isDim = suffix.includes("dim");
   const isAug = suffix.includes("aug") || suffix.includes("+");
 
-  const intervals = [{ semis: 0, role: "stable", degree: "1" }];
+  const intervals = [{ semis: 0, role: "anchor", degree: "1" }];
   if (isSus2) {
     intervals.push({ semis: 2, role: "color", degree: "2" });
   } else if (isSus4) {
@@ -196,7 +196,7 @@ export function parseChord(input) {
     intervals.push({ semis: isMinor ? 3 : 4, role: "color", degree: "3" });
   }
 
-  intervals.push({ semis: isDim ? 6 : isAug ? 8 : 7, role: "stable", degree: "5" });
+  intervals.push({ semis: isDim ? 6 : isAug ? 8 : 7, role: "color", degree: "5" });
 
   if (suffix.includes("maj7")) {
     intervals.push({ semis: 11, role: "tension", degree: "7" });
@@ -454,7 +454,7 @@ function chooseOffset(role, currentNote, prevChord, nextChord, rand, settings) {
   if (inNext) maxRange *= lerp(1.0, 0.45, lock);
   if (!inNext && role === "tension") maxRange *= lerp(1.0, 1.28, 1 - lock);
   if (inPrev && inNext) maxRange *= 0.78;
-  if (settings.stayMusical && role === "stable") maxRange *= 0.65;
+  if (settings.stayMusical && role === "anchor") maxRange *= 0.65;
   if (settings.stayMusical && settings.colorMode === "alien") maxRange *= 0.82;
 
   const sign = rand() > 0.5 ? 1 : -1;
@@ -482,13 +482,13 @@ function pushEvent(events, note, sectionIndex, voiceId, startBeat, durationBeats
     degree: note.degree,
     motionType: details.motionType,
     carriedFromPrevious: Boolean(details.carriedFromPrevious),
-    velocity: role === "anchor" || role === "stable" ? 0.58 : role === "tension" ? 0.42 : 0.5,
+    velocity: role === "anchor" ? 0.58 : role === "tension" ? 0.42 : 0.5,
   });
 }
 
 function addClassicEvent(events, note, sectionIndex, voiceId, startBeat, durationBeats, rand, settings, prevChord, chord, nextChord) {
   const cents = chooseOffset(note.role, note, prevChord, nextChord, rand, settings);
-  const driftWidth = settings.ghostEnabled ? settings.drift * (note.role === "stable" ? 8 : 18) : 0;
+  const driftWidth = settings.ghostEnabled ? settings.drift * (note.role === "anchor" ? 8 : 18) : 0;
   const driftEnd = clamp(cents + (rand() - 0.5) * driftWidth, -80, 80);
   const motionType = settings.mode === "pad" ? "stay" : "step";
 
@@ -502,7 +502,7 @@ function addClassicEvent(events, note, sectionIndex, voiceId, startBeat, duratio
 
 function getRoleColorIntensity(role, settings) {
   const profile = colorProfiles[settings.colorMode];
-  if (role === "anchor") return profile.stable;
+  if (role === "anchor") return profile.anchor;
   if (role === "tension") return profile.tension;
   return profile.color;
 }
