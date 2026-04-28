@@ -68,6 +68,13 @@ export class WebAudioEngine {
     this.activeVoiceCount = 0;
     this.streamRuntime = null;
     this.onPatternExtended = null;
+
+    // Live state — read by tick() on every cycle
+    this.currentPattern = null;
+    this.currentCoreSettings = null;
+    this.currentSoundSettings = null;
+    this.currentBpm = 92;
+    this.pendingUpdate = null;
   }
 
   setup() {
@@ -140,18 +147,23 @@ export class WebAudioEngine {
     const { ctx } = this.setup();
     if (ctx.state === "suspended") await ctx.resume();
 
+    this.currentPattern = pattern;
+    this.currentCoreSettings = coreSettings;
+    this.currentSoundSettings = soundSettings;
+    this.currentBpm = bpm;
+    this.pendingUpdate = null;
+
     this.isPlaying = true;
     this.loopStartTime = ctx.currentTime + 0.05;
     this.lastScheduledBeat = null;
-    const previousLoopBeats = pattern.loopBeats;
     this.streamRuntime = pattern.generatorMode === "infinite"
       ? createInfiniteStreamRuntime(pattern, coreSettings, pattern.seed || 1)
       : null;
-    if (this.streamRuntime && pattern.loopBeats !== previousLoopBeats) {
+    if (this.streamRuntime) {
       this.onPatternExtended?.(pattern);
     }
     this.voiceManager.clear();
-    this.tick(pattern, coreSettings, soundSettings, bpm);
+    this.tick();
   }
 
   stop() {
@@ -161,6 +173,7 @@ export class WebAudioEngine {
     this.activeVoiceCount = 0;
     this.voiceManager.clear();
     this.streamRuntime = null;
+    this.pendingUpdate = null;
     this.audio?.ctx.close();
     this.audio = null;
   }
@@ -171,38 +184,76 @@ export class WebAudioEngine {
     await this.start(pattern, coreSettings, soundSettings, bpm);
   }
 
-  tick(pattern, coreSettings, soundSettings, bpm) {
+  // Immediate: applies to the next scheduled notes (~45ms lag max).
+  // Use for sound params: waveform, cutoff, attack, release, space, reverb, delay, bpm.
+  updateSoundSettings(soundSettings, coreSettings, bpm) {
+    if (!this.isPlaying) return;
+    this.currentSoundSettings = soundSettings;
+    this.currentCoreSettings = coreSettings;
+    this.currentBpm = bpm;
+    this.updateMasterFx(soundSettings, bpm);
+  }
+
+  // Deferred: new pattern takes effect at the next bar boundary (beat multiple of 4).
+  // Use for generative params: voicing, arp, scale, harmonic motion, etc.
+  schedulePatternSwap(pattern, coreSettings, soundSettings, bpm) {
+    if (!this.isPlaying) return;
+    this.pendingUpdate = { pattern, coreSettings, soundSettings, bpm };
+  }
+
+  tick() {
     if (!this.isPlaying) return;
 
     const { ctx } = this.setup();
-    this.updateMasterFx(soundSettings, bpm);
+
+    // Apply pending pattern swap at the next bar boundary
+    if (this.pendingUpdate && this.lastScheduledBeat != null) {
+      const nextBar = Math.ceil((this.lastScheduledBeat + 0.001) / 4) * 4;
+      const secsToNextBar = (nextBar - this.lastScheduledBeat) * (60 / this.currentBpm);
+      if (secsToNextBar <= this.lookaheadSeconds + 0.05) {
+        const { pattern, coreSettings, soundSettings, bpm } = this.pendingUpdate;
+        this.pendingUpdate = null;
+        this.currentPattern = pattern;
+        this.currentCoreSettings = coreSettings;
+        this.currentSoundSettings = soundSettings;
+        this.currentBpm = bpm;
+        if (pattern.generatorMode === "infinite") {
+          this.streamRuntime = createInfiniteStreamRuntime(pattern, coreSettings, pattern.seed || 1);
+        } else {
+          this.streamRuntime = null;
+        }
+      }
+    }
+
+    this.updateMasterFx(this.currentSoundSettings, this.currentBpm);
     this.voiceManager.advanceTo(ctx.currentTime);
     const isInfinite = Boolean(this.streamRuntime);
-    const livePattern = this.getPlaybackPattern(pattern);
-    const currentBeat = this.getCurrentBeat(bpm, livePattern);
+    const livePattern = this.getPlaybackPattern(this.currentPattern);
+    const currentBeat = this.getCurrentBeat(this.currentBpm, livePattern);
     this.extendInfinitePlaybackIfNeeded(currentBeat || 0);
+
     const blockContext = getNextBrowserScheduleBlock({
       audioCurrentTime: ctx.currentTime,
       loopStartTime: this.loopStartTime,
-      bpm,
+      bpm: this.currentBpm,
       sampleRate: ctx.sampleRate,
       loopBeats: livePattern.loopBeats,
       lookaheadSeconds: this.lookaheadSeconds,
       lastScheduledBeat: this.lastScheduledBeat,
       isLooping: !isInfinite,
     });
-    const scheduled = scheduleEventsForBlock(livePattern.events, blockContext);
 
+    const scheduled = scheduleEventsForBlock(livePattern.events, blockContext);
     scheduled.forEach((event) => {
       const when = ctx.currentTime + event.sampleOffset / ctx.sampleRate;
       const durationSeconds = event.durationSamples / ctx.sampleRate;
-      this.playVoice(event, when, durationSeconds, coreSettings, soundSettings);
+      this.playVoice(event, when, durationSeconds, this.currentCoreSettings, this.currentSoundSettings);
     });
 
     this.activeVoiceCount = this.voiceManager.getVoiceCount();
-    this.lastScheduledBeat = blockContext.blockStartBeat + samplesToBeats(blockContext.blockSize, bpm, ctx.sampleRate);
+    this.lastScheduledBeat = blockContext.blockStartBeat + samplesToBeats(blockContext.blockSize, this.currentBpm, ctx.sampleRate);
     clearTimeout(this.timer);
-    this.timer = setTimeout(() => this.tick(pattern, coreSettings, soundSettings, bpm), this.tickMs);
+    this.timer = setTimeout(() => this.tick(), this.tickMs);
   }
 
   getPlaybackPattern(pattern) {

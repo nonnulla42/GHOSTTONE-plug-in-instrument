@@ -73,7 +73,11 @@ function rebuildPattern({ restartAudio = true } = {}) {
   visualizer.render(state.pattern, state.currentSectionIndex, getVisualBeat(patch.bpm));
 
   if (restartAudio) {
-    audio.restart(state.pattern, coreSettings, soundSettings, patch.bpm);
+    if (audio.isPlaying) {
+      audio.schedulePatternSwap(state.pattern, coreSettings, soundSettings, patch.bpm);
+    } else {
+      audio.restart(state.pattern, coreSettings, soundSettings, patch.bpm);
+    }
   }
 }
 
@@ -89,7 +93,11 @@ function refreshSoundOnly({ restartAudio = true } = {}) {
 
   updateReadouts(els, state.pattern, coreSettings, patch.bpm, soundSettings, state.currentSectionIndex);
   if (restartAudio) {
-    audio.restart(state.pattern, coreSettings, soundSettings, patch.bpm);
+    if (audio.isPlaying) {
+      audio.updateSoundSettings(soundSettings, coreSettings, patch.bpm);
+    } else {
+      audio.restart(state.pattern, coreSettings, soundSettings, patch.bpm);
+    }
   }
 }
 
