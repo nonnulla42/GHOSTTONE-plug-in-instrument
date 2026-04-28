@@ -263,6 +263,7 @@ function bindEvents() {
   });
 
   els.generateButton.addEventListener("click", regenerateSeed);
+  els.seedValue.addEventListener("change", () => updateActivePatchFromUi());
   els.presetSelect.addEventListener("change", () => applyPreset(els.presetSelect.value));
   els.exportPatchButton.addEventListener("click", exportPatchJson);
   els.importPatchButton.addEventListener("click", () => els.importPatchFile.click());
@@ -338,7 +339,6 @@ function bindEvents() {
     els.arpDirection,
     els.arpFeel,
     els.arpDensity,
-    els.arpVariation,
     els.arpContinuity,
     els.globalRoot,
     els.scaleName,

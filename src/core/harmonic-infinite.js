@@ -432,7 +432,7 @@ export function buildInfiniteSectionSequence(seedSections, settings, seed, total
         const picked = pickFromMemory(progression, random);
         nextState = picked.state;
         currentMemIndex = picked.index;
-      } else if (memR < 0.75) {
+      } else if (memR < 0.70) {
         // REPEAT CURRENT: hold the present chord
         nextState = progression[currentMemIndex];
       } else {

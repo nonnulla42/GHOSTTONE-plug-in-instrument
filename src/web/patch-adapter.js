@@ -1,14 +1,17 @@
 import { createPatchFromPreset, normalizePatch } from "../state/patch-state.js";
 
-const coreRangeControls = ["ghostAmount", "drift", "harmonyLock", "harmonicMotion", "voicingVariation", "voicingContinuity", "arpDensity", "arpVariation", "arpContinuity", "scaleInfluence", "memoryStrength", "registerCenter"];
+const coreRangeControls = ["ghostAmount", "drift", "harmonyLock", "harmonicMotion", "voicingVariation", "voicingContinuity", "arpDensity", "arpContinuity", "scaleInfluence", "memoryStrength", "registerCenter"];
 const coreSelectControls = ["colorMode", "voicingStyle", "arpDirection", "arpFeel", "localScaleType", "localTargetDegree", "globalRoot", "scaleName"];
 const coreToggleControls = ["stayMusical", "ghostEnabled", "localDegreeFalloff"];
 const soundControls = ["waveform", "cutoff", "attack", "release", "space", "reverbMix", "delayMix"];
 
 export function capturePatch(els, basePatch, name = basePatch?.name || "Patch") {
+  const seedRaw = Number(els.seedValue?.value);
+  const seed = Number.isFinite(seedRaw) && seedRaw >= 1 ? Math.trunc(seedRaw) : basePatch.seed;
   return normalizePatch({
     ...basePatch,
     name,
+    seed,
     bpm: Number(els.bpm.value),
     barStates: cloneBarStates(basePatch.barStates),
     chords: els.chordInputs.map((input) => ({

@@ -20,7 +20,6 @@ export const PRESETS = [
       arpDirection: "up",
       arpFeel: "even",
       arpDensity: 50,
-      arpVariation: 35,
       arpContinuity: 60,
     },
     soundControls: {
@@ -52,7 +51,6 @@ export const PRESETS = [
       arpDirection: "up",
       arpFeel: "even",
       arpDensity: 35,
-      arpVariation: 12,
       arpContinuity: 82,
     },
     soundControls: {
@@ -84,7 +82,6 @@ export const PRESETS = [
       arpDirection: "insideout",
       arpFeel: "flowing",
       arpDensity: 56,
-      arpVariation: 45,
       arpContinuity: 50,
     },
     soundControls: {
@@ -116,7 +113,6 @@ export const PRESETS = [
       arpDirection: "bounce",
       arpFeel: "broken",
       arpDensity: 78,
-      arpVariation: 58,
       arpContinuity: 38,
     },
     soundControls: {
@@ -150,7 +146,6 @@ export const PRESETS = [
       arpDirection: "up",
       arpFeel: "even",
       arpDensity: 40,
-      arpVariation: 20,
       arpContinuity: 72,
       memoryStrength: 65,
     },
@@ -187,7 +182,6 @@ export const PRESETS = [
       arpDirection: "up",
       arpFeel: "flowing",
       arpDensity: 72,
-      arpVariation: 42,
       arpContinuity: 55,
       memoryStrength: 45,
     },
@@ -224,7 +218,6 @@ export const PRESETS = [
       arpDirection: "up",
       arpFeel: "flowing",
       arpDensity: 55,
-      arpVariation: 38,
       arpContinuity: 58,
       memoryStrength: 38,
     },

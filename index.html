@@ -32,7 +32,7 @@
           </div>
           <div class="seed-readout">
             <span>Seed</span>
-            <strong id="seedValue">0</strong>
+            <input type="number" id="seedValue" min="1" max="999999" step="1" value="0" />
           </div>
           <button id="exportPatchButton" class="secondary-button" type="button">Export Patch</button>
           <button id="importPatchButton" class="secondary-button" type="button">Import Patch</button>
@@ -316,11 +316,6 @@
               <span>Density</span>
               <strong id="arpDensityValue">50</strong>
               <input id="arpDensity" type="range" min="0" max="100" value="50" />
-            </label>
-            <label class="slider-row compact">
-              <span>Variation</span>
-              <strong id="arpVariationValue">35</strong>
-              <input id="arpVariation" type="range" min="0" max="100" value="35" />
             </label>
             <label class="slider-row compact">
               <span>Continuity</span>

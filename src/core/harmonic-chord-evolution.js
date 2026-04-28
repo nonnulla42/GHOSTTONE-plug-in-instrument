@@ -552,11 +552,13 @@ function shouldProtectInversionContinuity({ candidate, nearestTarget, previous, 
   return false;
 }
 
-function blendedVoiceTarget({ candidate, pitchClasses, previous, previousNotes, range, rolePc }) {
+function blendedVoiceTarget({ candidate, pitchClasses, previous, previousNotes, range, rolePc, settings }) {
+  const voicingContinuity = Number(settings?.voicingContinuity ?? 0.65);
+  const continuityModifier = clamp(0.4 + (1 - voicingContinuity) * 1.6, 0.1, 2.0);
   const continuityTarget = previous.midi * 0.72 + range.center * 0.28;
   const roleTarget = midiInRangeForVoice(rolePc, range, continuityTarget);
   const nearestTarget = nearestChordMidi(pitchClasses, range, previous.midi, previous.pitchClass);
-  let weight = roleWeight(previous.role);
+  let weight = clamp(roleWeight(previous.role) * continuityModifier, 0, 1);
 
   if (Math.abs(roleTarget - previous.midi) > 7) {
     weight = Math.min(weight, 0.18);
@@ -596,6 +598,7 @@ export function applyVoiceLeading(candidate, current, options = {}) {
         previousNotes,
         range,
         rolePc: pc,
+        settings: options.settings,
       });
       const movement = Math.abs(midi - previous.midi);
       return {

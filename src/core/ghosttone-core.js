@@ -61,7 +61,6 @@ export const defaultSettings = Object.freeze({
   arpDirection: "up",
   arpFeel: "even",
   arpDensity: 0.5,
-  arpVariation: 0.35,
   arpContinuity: 0.6,
   registerCenter: 60,
 });
@@ -128,7 +127,6 @@ function normalizeSettings(settings = {}) {
     voicingVariation: normalizeUnit(merged.voicingVariation, defaultSettings.voicingVariation),
     voicingContinuity: normalizeUnit(merged.voicingContinuity, defaultSettings.voicingContinuity),
     arpDensity: normalizeUnit(merged.arpDensity, defaultSettings.arpDensity),
-    arpVariation: normalizeUnit(merged.arpVariation, defaultSettings.arpVariation),
     arpContinuity: normalizeUnit(merged.arpContinuity, defaultSettings.arpContinuity),
   };
 }
@@ -254,7 +252,11 @@ function applyVoicing(notes, slotState, settings, previousNotes, sectionIndex, s
   const continuity = settings.voicingContinuity;
   const rand = makeRandom(seed + sectionIndex * 997 + (slotState.voicingSeed || 0) + 11);
   const seededShift = slotState.voicingSeed ? Math.floor(rand() * notes.length * 2) % notes.length : 0;
-  const baseShift = settings.voicingStyle === "smooth" && previousNotes?.length ? 0 : seededShift;
+  const variation = settings.voicingVariation ?? 0;
+  const variationRand = makeRandom(seed + sectionIndex * 100003 + 77);
+  const variationShift = variation > 0 ? Math.floor(variationRand() * notes.length * variation) % notes.length : 0;
+  const effectiveShift = slotState.voicingSeed ? seededShift : variationShift;
+  const baseShift = effectiveShift;
   let voiced = normalizeAscending(rotateNotes(notes, baseShift));
 
   voiced = voiced.map((note, index) => {

@@ -34,7 +34,6 @@ export function getElements(root = document) {
     arpDirection: root.querySelector("#arpDirection"),
     arpFeel: root.querySelector("#arpFeel"),
     arpDensity: root.querySelector("#arpDensity"),
-    arpVariation: root.querySelector("#arpVariation"),
     arpContinuity: root.querySelector("#arpContinuity"),
     globalRoot: root.querySelector("#globalRoot"),
     scaleName: root.querySelector("#scaleName"),
@@ -68,7 +67,6 @@ export function getElements(root = document) {
     voicingVariationValue: root.querySelector("#voicingVariationValue"),
     voicingContinuityValue: root.querySelector("#voicingContinuityValue"),
     arpDensityValue: root.querySelector("#arpDensityValue"),
-    arpVariationValue: root.querySelector("#arpVariationValue"),
     arpContinuityValue: root.querySelector("#arpContinuityValue"),
   };
 }
@@ -111,7 +109,6 @@ export function readCoreSettings(els, mode, generatorMode = "classic") {
     arpDirection: els.arpDirection.value,
     arpFeel: els.arpFeel.value,
     arpDensity: Number(els.arpDensity.value) / 100,
-    arpVariation: Number(els.arpVariation.value) / 100,
     arpContinuity: Number(els.arpContinuity.value) / 100,
     globalRoot: els.globalRoot?.value ?? "none",
     scaleName: els.scaleName?.value ?? "none",
@@ -210,7 +207,6 @@ export function updateReadouts(els, pattern, settings, bpm, soundSettings, curre
   els.voicingVariationValue.textContent = Math.round(settings.voicingVariation * 100);
   els.voicingContinuityValue.textContent = Math.round(settings.voicingContinuity * 100);
   els.arpDensityValue.textContent = Math.round(settings.arpDensity * 100);
-  els.arpVariationValue.textContent = Math.round(settings.arpVariation * 100);
   els.arpContinuityValue.textContent = Math.round(settings.arpContinuity * 100);
   if (els.scaleInfluenceValue) els.scaleInfluenceValue.textContent = Math.round((settings.scaleInfluence ?? 0) * 100);
   if (els.memoryStrengthValue) els.memoryStrengthValue.textContent = Math.round((settings.memoryStrength ?? 0.5) * 100);
@@ -222,7 +218,7 @@ export function updateReadouts(els, pattern, settings, bpm, soundSettings, curre
   els.eventReadout.textContent = String(pattern.events.length);
   els.currentChord.textContent = pattern.sections[currentSectionIndex]?.label || "-";
   els.patternTitle.textContent = `${capitalize(settings.colorMode)} ${formatGeneratorMode(settings.generatorMode)} ${settings.mode} at ${bpm} BPM`;
-  if (els.seedValue) els.seedValue.textContent = String(pattern.seed);
+  if (els.seedValue) els.seedValue.value = String(pattern.seed);
 }
 
 function midiToNoteName(midi) {
