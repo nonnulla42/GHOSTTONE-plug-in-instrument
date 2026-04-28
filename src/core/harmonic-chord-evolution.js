@@ -23,7 +23,7 @@ function getVoiceRanges(registerCenter) {
 }
 
 const ROLE_WEIGHTS = Object.freeze({
-  anchor: 0.8,
+  anchor: 0.25,
   support: 0.5,
   tension: 0.5,
   color: 0.2,
