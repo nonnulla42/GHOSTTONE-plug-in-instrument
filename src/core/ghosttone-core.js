@@ -371,14 +371,13 @@ function buildArpOrder(notes, section, settings, previousSection, seed) {
 }
 
 function getArpStepOffsets(sectionBeats, settings) {
-  const densitySteps = Math.round(lerp(sectionBeats, sectionBeats * 4, settings.arpDensity));
-  const steps = clamp(densitySteps, sectionBeats <= 2 ? 2 : 4, sectionBeats <= 2 ? 8 : 16);
+  const steps = musicalStepCount(settings.arpDensity, sectionBeats);
   const stepSize = sectionBeats / steps;
   const offsets = [];
 
   for (let step = 0; step < steps; step += 1) {
     let offset = step * stepSize;
-    if (settings.arpFeel === "flowing") offset += (step % 2) * stepSize * 0.18;
+    if (settings.arpFeel === "flowing" && step % 2 === 1) offset += stepSize * 0.33;
     if (settings.arpFeel === "syncopated" && step % 4 === 2) offset += stepSize * 0.45;
     if (settings.arpFeel === "broken" && step % 3 === 1) offset += stepSize * 0.32;
     if (settings.arpFeel === "pulsing" && step % 2 === 1) offset += stepSize * 0.08;
@@ -609,9 +608,11 @@ function motionTypeFromMovement(previousEvent, midi) {
   return movement <= 2 ? "step" : "leap";
 }
 
-function getArpStepCount(sectionBeats, settings) {
-  const densitySteps = Math.round(lerp(sectionBeats, sectionBeats * 4, settings.arpDensity));
-  return clamp(densitySteps, sectionBeats <= 2 ? 2 : 4, sectionBeats <= 2 ? 8 : 16);
+const ARP_GRID_STEPS = [4, 8, 12, 16];
+
+function musicalStepCount(density, sectionBeats) {
+  const base = ARP_GRID_STEPS[Math.min(Math.floor(density * 4), 3)];
+  return Math.max(1, Math.round(base * sectionBeats / 4));
 }
 
 function emitPadEvents(events, context) {
@@ -631,18 +632,18 @@ function emitPadEvents(events, context) {
 function emitArpEvents(events, context, previousVoiceEvents) {
   const { section, sectionIndex, notes, normalizedSeed, rand, settings, prevChord, nextChord, previousSection } = context;
   const arpNotes = buildArpOrder(notes, section, settings, previousSection, normalizedSeed);
-  const steps = getArpStepCount(section.durationBeats, settings);
-  const stepDuration = section.durationBeats / steps;
+  const offsets = getArpStepOffsets(section.durationBeats, settings);
 
-  for (let step = 0; step < steps; step += 1) {
+  for (let step = 0; step < offsets.length; step += 1) {
     const note = arpNotes[step % arpNotes.length];
     const voiceId = noteVoiceId(note, step % arpNotes.length);
     const previousEvent = previousVoiceEvents.get(voiceId) || null;
     const selected = keepAssignedPitchClass(note, previousEvent, "step");
-    const startBeat = section.startBeat + step * stepDuration;
+    const startBeat = section.startBeat + offsets[step];
+    const duration = getArpDuration(section.durationBeats, offsets, step, settings);
     const motionType = motionTypeFromMovement(previousEvent, selected.midi);
 
-    addRoleBasedEvent(events, selected, sectionIndex, voiceId, startBeat, stepDuration, rand, settings, prevChord, section, nextChord, {
+    addRoleBasedEvent(events, selected, sectionIndex, voiceId, startBeat, duration, rand, settings, prevChord, section, nextChord, {
       motionType,
       carriedFromPrevious: false,
     });

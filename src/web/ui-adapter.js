@@ -206,7 +206,7 @@ export function updateReadouts(els, pattern, settings, bpm, soundSettings, curre
   els.spaceValue.textContent = Math.round(soundSettings.space * 100);
   els.voicingVariationValue.textContent = Math.round(settings.voicingVariation * 100);
   els.voicingContinuityValue.textContent = Math.round(settings.voicingContinuity * 100);
-  els.arpDensityValue.textContent = Math.round(settings.arpDensity * 100);
+  els.arpDensityValue.textContent = ["quarter", "8th", "triplet", "16th"][Math.min(Math.floor(settings.arpDensity * 4), 3)];
   els.arpContinuityValue.textContent = Math.round(settings.arpContinuity * 100);
   if (els.scaleInfluenceValue) els.scaleInfluenceValue.textContent = Math.round((settings.scaleInfluence ?? 0) * 100);
   if (els.memoryStrengthValue) els.memoryStrengthValue.textContent = Math.round((settings.memoryStrength ?? 0.5) * 100);
