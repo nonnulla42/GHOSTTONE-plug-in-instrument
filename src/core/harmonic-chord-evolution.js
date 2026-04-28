@@ -81,13 +81,13 @@ function computeScaleScore(pitchClasses, scaleNotes, root) {
   if (!scaleNotes) return 0;
   return pitchClasses.reduce((score, pc) => {
     const normalized = normalizePc(pc);
-    if (!scaleNotes.includes(normalized)) return score;
+    if (!scaleNotes.includes(normalized)) return score - 0.5;
     const interval = normalizePc(normalized - root);
-    if (interval === 0)             return score + 2.0; // root
-    if (interval === 7)             return score + 1.5; // fifth
-    if (interval === 3 || interval === 4) return score + 1.3; // third
-    if (interval === 5 || interval === 11) return score + 0.7; // fourth / leading tone
-    return score + 1.0;                                 // other scale degrees
+    if (interval === 0)             return score + 2.0;
+    if (interval === 7)             return score + 1.5;
+    if (interval === 3 || interval === 4) return score + 1.3;
+    if (interval === 5 || interval === 11) return score + 0.7;
+    return score + 1.0;
   }, 0);
 }
 
@@ -288,13 +288,14 @@ export function getNoteSimilarity(a, b, options = {}) {
         const bNorm = normalizePc(b);
         // delta is in scale degrees: odd=passing tone, even=chord-tone (thirds structure)
         const DEGREE_FALLOFF_SCORES = [0, 0.15, 0.4, 0.15];
+        const roleScale = options.localScaleRoleWeight ?? 1;
         const exactMatch = distance === 0 ? 0.5 : 0;
-        if (bNorm === scale[degreeIdx]) return exactMatch + 1;
+        if (bNorm === scale[degreeIdx]) return exactMatch + 1 * roleScale;
         const maxDelta = localDegreeFalloff > 0 ? 3 : 0;
         for (let delta = 1; delta <= maxDelta; delta++) {
           const pcLow = scale[(degreeIdx - delta + scale.length) % scale.length];
           const pcHigh = scale[(degreeIdx + delta) % scale.length];
-          if (bNorm === pcLow || bNorm === pcHigh) return exactMatch + (DEGREE_FALLOFF_SCORES[delta] ?? 0);
+          if (bNorm === pcLow || bNorm === pcHigh) return exactMatch + (DEGREE_FALLOFF_SCORES[delta] ?? 0) * roleScale;
         }
         return exactMatch;
       }
@@ -331,23 +332,30 @@ function enumerateChordVocabulary() {
   return candidates;
 }
 
+const LOCAL_SCALE_ROLE_WEIGHTS = Object.freeze({ anchor: 1.3, support: 1.0, tension: 0.85, color: 0.65 });
+
 export function computeChordSimilarityDetails(candidate, current, options = {}) {
+  const settings = options.settings || {};
   const currentNotes = normalizeNotes(current);
   const anchorNote = currentNotes.find((n) => n.role === "anchor");
-  const localRootPitchClass = anchorNote?.pitchClass ?? currentNotes[0]?.pitchClass ?? null;
+  const globalRootPc = (settings.globalRoot != null && settings.globalRoot !== "none")
+    ? normalizePc(Number(settings.globalRoot))
+    : null;
+  const localRootPitchClass = globalRootPc ?? anchorNote?.pitchClass ?? currentNotes[0]?.pitchClass ?? null;
   const enrichedOptions = localRootPitchClass != null ? { ...options, localRootPitchClass } : options;
-  const currentPcs = currentNotes.map((note) => note.pitchClass);
   const candidatePcs = (candidate.pitchClasses || normalizeNotes(candidate).map((note) => note.pitchClass)).map(normalizePc);
   const used = new Set();
   let exactMatches = 0;
   let distanceMatches = 0;
   let falloffMatches = 0;
 
-  const totalScore = currentPcs.reduce((sum, pc) => {
+  const totalScore = currentNotes.reduce((sum, note) => {
+    const roleWeight = LOCAL_SCALE_ROLE_WEIGHTS[note.role] ?? 1.0;
+    const noteOptions = roleWeight !== 1.0 ? { ...enrichedOptions, localScaleRoleWeight: roleWeight } : enrichedOptions;
     let best = { index: -1, score: 0 };
     candidatePcs.forEach((candidatePc, index) => {
       if (used.has(index)) return;
-      const score = getNoteSimilarity(pc, candidatePc, enrichedOptions);
+      const score = getNoteSimilarity(note.pitchClass, candidatePc, noteOptions);
       if (score > best.score) best = { index, score };
     });
 
