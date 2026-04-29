@@ -420,7 +420,7 @@ test("infinite phrase obeys the global scale fence at full scale influence", () 
 test("infinite phrase only uses pitch classes with positive local score after global filtering", () => {
   const settings = {
     generatorMode: "infinitePhrase",
-    harmonicMotion: 0.18,
+    harmonicMotion: 0,
     harmonyLock: 0.58,
     stayMusical: true,
     ghostEnabled: false,
@@ -458,6 +458,29 @@ test("infinite phrase only uses pitch classes with positive local score after gl
     assert.ok(sectionEventPcs.length > 0);
     assert.ok(sectionEventPcs.every((pc) => allowed.has(pc)));
   });
+});
+
+test("high harmonic motion can relax local-scale filtering back toward the global scale", () => {
+  const settings = {
+    generatorMode: "infinitePhrase",
+    harmonicMotion: 1,
+    harmonyLock: 0.58,
+    stayMusical: true,
+    ghostEnabled: false,
+    localScaleType: "major",
+    localTargetDegree: 5,
+    localDegreeFalloff: 1,
+    globalRoot: "0",
+    scaleName: "major",
+    scaleInfluence: 1,
+    arpDensity: 0.6,
+  };
+  const result = generatePattern(settings, cmaj7Progression(8), 14006);
+  const allPcs = [...new Set(result.events.map((event) => normalizePc(event.midi)))];
+  const positiveLocal = new Set([0, 4, 5, 7, 9, 11]);
+
+  assert.ok(allPcs.every((pc) => [0, 2, 4, 5, 7, 9, 11].includes(pc)));
+  assert.ok(allPcs.some((pc) => !positiveLocal.has(pc)));
 });
 
 function range(values) {

@@ -122,14 +122,17 @@ function getLocalWeight(pc, previousSection, settings = {}) {
 }
 
 function getSourcePitchClassWeights(section, previousSection, settings = {}) {
+  const harmonicMotion = clamp(Number(settings.harmonicMotion) || 0, 0, 1);
   const candidates = Array.from({ length: 12 }, (_, pc) => {
     const globalWeight = getGlobalWeight(pc, settings);
     const localWeight = getLocalWeight(pc, previousSection ?? section, settings);
+    const effectiveLocalWeight = localWeight * (1 - harmonicMotion) + harmonicMotion;
     return {
       pc,
       globalWeight,
       localWeight,
-      weight: globalWeight * localWeight,
+      effectiveLocalWeight,
+      weight: globalWeight * effectiveLocalWeight,
     };
   }).filter((entry) => entry.globalWeight > 0);
 
@@ -139,18 +142,26 @@ function getSourcePitchClassWeights(section, previousSection, settings = {}) {
       pc,
       globalWeight: 1,
       localWeight: 1,
+      effectiveLocalWeight: 1,
       weight: 1,
     }));
   }
 
   const hasLocalRule = hasLocalScaleRule(settings);
-  const positive = candidates.filter((entry) => entry.weight > 0);
-  if (positive.length || !hasLocalRule) return positive.length ? positive : candidates;
+  if (!hasLocalRule) {
+    return candidates.filter((entry) => entry.weight > 0);
+  }
 
-  return candidates.map((entry) => ({
-    ...entry,
-    weight: entry.globalWeight * Math.max(0.0001, entry.localWeight),
-  }));
+  const strictlyPositive = candidates.filter((entry) => entry.localWeight > 0);
+  if (strictlyPositive.length && harmonicMotion <= 0.001) {
+    return strictlyPositive.map((entry) => ({
+      ...entry,
+      weight: entry.globalWeight * entry.localWeight,
+      effectiveLocalWeight: entry.localWeight,
+    }));
+  }
+
+  return candidates.filter((entry) => entry.weight > 0);
 }
 
 function phraseNotesPerFourBeats(density) {
