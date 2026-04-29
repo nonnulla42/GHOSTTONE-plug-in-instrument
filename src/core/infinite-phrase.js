@@ -1,3 +1,4 @@
+import { getNoteSimilarity } from "./harmonic-chord-evolution.js";
 import { generateRoleDriftEndCents, generateRoleMicroOffsetCents } from "./harmonic-roles.js";
 
 const SCALE_DEFINITIONS = Object.freeze({
@@ -77,47 +78,79 @@ function getLocalRoot(previousSection) {
   return null;
 }
 
-function getSourcePitchClassWeights(section, previousSection, settings = {}) {
-  const harmonicMotion = clamp(Number(settings.harmonicMotion) || 0, 0, 1);
+function hasGlobalScale(settings = {}) {
+  return Boolean(
+    settings.scaleName &&
+    settings.scaleName !== "none" &&
+    settings.globalRoot != null &&
+    settings.globalRoot !== "none",
+  );
+}
+
+function getGlobalWeight(pc, settings = {}) {
+  if (!hasGlobalScale(settings)) return 1;
+
   const scaleInfluence = clamp(Number(settings.scaleInfluence) || 0, 0, 1);
-  const chordPcs = getCurrentChordPitchClasses(section);
-  const previousChordPcs = getCurrentChordPitchClasses(previousSection);
-  const globalScale = settings.scaleName && settings.scaleName !== "none" && settings.globalRoot != null && settings.globalRoot !== "none"
-    ? buildScaleNotes(settings.scaleName, Number(settings.globalRoot))
-    : null;
-  const localScale = settings.localScaleType && settings.localScaleType !== "chromatic"
-    ? buildScaleNotes(settings.localScaleType, getLocalRoot(previousSection ?? section))
-    : null;
-  const entries = new Map();
+  const globalScale = buildScaleNotes(settings.scaleName, Number(settings.globalRoot));
+  if (!globalScale?.length) return 1;
 
-  function push(pc, weight, source) {
-    const key = normalizePc(pc);
-    const existing = entries.get(key) || { pc: key, weight: 0, sources: new Set() };
-    existing.weight += weight;
-    existing.sources.add(source);
-    entries.set(key, existing);
-  }
+  return globalScale.includes(normalizePc(pc))
+    ? 1
+    : Math.max(0, 1 - scaleInfluence) * 0.25;
+}
 
-  chordPcs.forEach((pc) => push(pc, 2.4 + harmonicMotion * 0.4, "chord"));
-  previousChordPcs.forEach((pc) => push(pc, 0.55 + harmonicMotion * 0.15, "previous"));
-  (globalScale || []).forEach((pc) => push(pc, 0.8 + scaleInfluence * 1.9, "global"));
-  (localScale || []).forEach((pc) => push(pc, 0.7 + (1 - harmonicMotion) * 1.8, "local"));
+function hasLocalScaleRule(settings = {}) {
+  return Boolean(settings.localScaleType && settings.localScaleType !== "none");
+}
 
-  if (!entries.size) {
-    chordPcs.forEach((pc) => push(pc, 1, "chord"));
-  }
+function getLocalWeight(pc, previousSection, settings = {}) {
+  if (!hasLocalScaleRule(settings)) return 1;
 
-  return [...entries.values()].map((entry) => {
-    let weight = entry.weight;
-    if (entry.sources.has("global") && entry.sources.has("local")) weight += 0.85;
-    if (entry.sources.has("chord") && entry.sources.has("local")) weight += 0.45;
-    if (entry.sources.has("chord") && entry.sources.has("global")) weight += 0.3;
+  const previousPitchClasses = getCurrentChordPitchClasses(previousSection);
+  if (!previousPitchClasses.length) return 0;
+
+  const localRootPitchClass = getLocalRoot(previousSection);
+  const options = {
+    localScaleType: settings.localScaleType,
+    localTargetDegree: settings.localTargetDegree,
+    localDegreeFalloff: settings.localDegreeFalloff,
+    localRootPitchClass,
+  };
+
+  return previousPitchClasses.reduce((best, previousPc) =>
+    Math.max(best, getNoteSimilarity(previousPc, pc, options)), 0);
+}
+
+function getSourcePitchClassWeights(section, previousSection, settings = {}) {
+  const candidates = Array.from({ length: 12 }, (_, pc) => {
+    const globalWeight = getGlobalWeight(pc, settings);
+    const localWeight = getLocalWeight(pc, previousSection ?? section, settings);
     return {
-      pc: entry.pc,
-      weight,
-      sources: [...entry.sources],
+      pc,
+      globalWeight,
+      localWeight,
+      weight: globalWeight * localWeight,
     };
-  });
+  }).filter((entry) => entry.globalWeight > 0);
+
+  if (!candidates.length) {
+    const fallbackPcs = getCurrentChordPitchClasses(section);
+    return fallbackPcs.map((pc) => ({
+      pc,
+      globalWeight: 1,
+      localWeight: 1,
+      weight: 1,
+    }));
+  }
+
+  const hasLocalRule = hasLocalScaleRule(settings);
+  const positive = candidates.filter((entry) => entry.weight > 0);
+  if (positive.length || !hasLocalRule) return positive.length ? positive : candidates;
+
+  return candidates.map((entry) => ({
+    ...entry,
+    weight: entry.globalWeight * Math.max(0.0001, entry.localWeight),
+  }));
 }
 
 function phraseNotesPerFourBeats(density) {

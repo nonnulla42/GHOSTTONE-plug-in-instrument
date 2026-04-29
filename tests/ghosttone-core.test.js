@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { generatePattern, parseChord } from "../src/core/ghosttone-core.js";
+import { getNoteSimilarity } from "../src/core/harmonic-chord-evolution.js";
 
 const progression = [
   { split: false, slots: [{ chord: "Am9", voicingSeed: 0, arpSeed: 0 }] },
@@ -393,6 +394,70 @@ test("infinite phrase keeps its register centered over long playback", () => {
   assert.ok(Math.max(...midis) <= 79);
   assert.ok(Math.min(...midis) >= 41);
   assert.ok(Math.abs(chunkAverages[chunkAverages.length - 1] - chunkAverages[0]) <= 4.5);
+});
+
+test("infinite phrase obeys the global scale fence at full scale influence", () => {
+  const result = generatePattern({
+    generatorMode: "infinitePhrase",
+    harmonicMotion: 0.28,
+    harmonyLock: 0.58,
+    stayMusical: true,
+    ghostEnabled: false,
+    localScaleType: "major",
+    localTargetDegree: 5,
+    localDegreeFalloff: 1,
+    globalRoot: "0",
+    scaleName: "major",
+    scaleInfluence: 1,
+    arpDensity: 0.65,
+  }, cmaj7Progression(8), 14004);
+  const globalScale = new Set([0, 2, 4, 5, 7, 9, 11]);
+
+  assert.ok(result.events.length > 0);
+  assert.ok(result.events.every((event) => globalScale.has(normalizePc(event.midi))));
+});
+
+test("infinite phrase only uses pitch classes with positive local score after global filtering", () => {
+  const settings = {
+    generatorMode: "infinitePhrase",
+    harmonicMotion: 0.18,
+    harmonyLock: 0.58,
+    stayMusical: true,
+    ghostEnabled: false,
+    localScaleType: "major",
+    localTargetDegree: 5,
+    localDegreeFalloff: 1,
+    globalRoot: "0",
+    scaleName: "major",
+    scaleInfluence: 1,
+    arpDensity: 0.6,
+  };
+  const result = generatePattern(settings, cmaj7Progression(8), 14005);
+
+  result.sections.forEach((section, sectionIndex) => {
+    const previousSection = result.sections[sectionIndex - 1] || section;
+    const localRoot = previousSection.notes.find((note) => note.harmonicRole === "anchor")?.pc ?? previousSection.rootPc;
+    const previousPcs = [...new Set(previousSection.notes.map((note) => note.pc))];
+    const allowed = new Set();
+
+    for (let candidatePc = 0; candidatePc < 12; candidatePc += 1) {
+      const score = previousPcs.reduce((best, previousPc) =>
+        Math.max(best, getNoteSimilarity(previousPc, candidatePc, {
+          localScaleType: settings.localScaleType,
+          localTargetDegree: settings.localTargetDegree,
+          localDegreeFalloff: settings.localDegreeFalloff,
+          localRootPitchClass: localRoot,
+        })), 0);
+      if (score > 0) allowed.add(candidatePc);
+    }
+
+    const sectionEventPcs = result.events
+      .filter((event) => event.sectionIndex === sectionIndex)
+      .map((event) => normalizePc(event.midi));
+
+    assert.ok(sectionEventPcs.length > 0);
+    assert.ok(sectionEventPcs.every((pc) => allowed.has(pc)));
+  });
 });
 
 function range(values) {
