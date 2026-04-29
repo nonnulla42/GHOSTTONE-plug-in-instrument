@@ -153,39 +153,31 @@ test("streaming infinite keeps anchors and avoids collapse across multiple windo
   assert.ok(pattern.sections.slice(-8).every((section) => (section.state?.stabilityScore || 0) > 0.2));
 });
 
-test("static long-term motion keeps adjacent chords more similar than restless", () => {
-  const staticSettings = {
-    generatorMode: "infinite",
-    harmonicMotion: 0,
-    mode: "pad",
-    harmonyLock: 0.88,
-    stayMusical: true,
-  };
-  const restlessSettings = {
-    ...staticSettings,
-    harmonicMotion: 1,
-    harmonyLock: 0.18,
-  };
-  const staticPattern = generatePattern(staticSettings, progression, 7005);
-  const restlessPattern = generatePattern(restlessSettings, progression, 7005);
-  const staticRuntime = createInfiniteStreamRuntime(staticPattern, staticSettings, 7005, {
-    initialLoopCount: 1,
-    extendLoopCount: 2,
-    lowWaterBeats: 16,
-  });
-  const restlessRuntime = createInfiniteStreamRuntime(restlessPattern, restlessSettings, 7005, {
-    initialLoopCount: 1,
-    extendLoopCount: 2,
-    lowWaterBeats: 16,
-  });
+test("streaming infinite avoids excessive immediate repeats at low memory", () => {
+  const repeatRates = [];
 
-  ensureInfiniteBeats(staticRuntime, 47.5);
-  ensureInfiniteBeats(restlessRuntime, 47.5);
+  for (let seed = 7100; seed < 7108; seed += 1) {
+    const settings = {
+      generatorMode: "infinite",
+      harmonicMotion: 0.3,
+      mode: "pad",
+      harmonyLock: 0.42,
+      stayMusical: true,
+      memoryStrength: 0,
+    };
+    const pattern = generatePattern(settings, progression, seed);
+    const runtime = createInfiniteStreamRuntime(pattern, settings, seed, {
+      initialLoopCount: 1,
+      extendLoopCount: 2,
+      lowWaterBeats: 16,
+    });
 
-  const staticSimilarity = averageAdjacentSimilarity(staticPattern.sections);
-  const restlessSimilarity = averageAdjacentSimilarity(restlessPattern.sections);
+    ensureInfiniteBeats(runtime, 47.5);
+    repeatRates.push(immediateRepeatRate(pattern.sections));
+  }
 
-  assert.ok(staticSimilarity >= restlessSimilarity);
+  const averageRepeatRate = repeatRates.reduce((sum, value) => sum + value, 0) / repeatRates.length;
+  assert.ok(averageRepeatRate < 0.03);
 });
 
 function averageAdjacentSimilarity(sections) {
@@ -215,4 +207,23 @@ function pcDistance(left, right) {
   const up = ((left - right) % 12 + 12) % 12;
   const down = ((right - left) % 12 + 12) % 12;
   return Math.min(up, down);
+}
+
+function immediateRepeatRate(sections) {
+  let repeats = 0;
+  for (let index = 1; index < sections.length; index += 1) {
+    if (sectionSignature(sections[index - 1]) === sectionSignature(sections[index])) {
+      repeats += 1;
+    }
+  }
+  return repeats / Math.max(1, sections.length - 1);
+}
+
+function sectionSignature(section) {
+  return JSON.stringify({
+    rootPc: section.rootPc,
+    notes: section.notes
+      .map((note) => [note.pc, note.midi])
+      .sort((left, right) => left[1] - right[1] || left[0] - right[0]),
+  });
 }

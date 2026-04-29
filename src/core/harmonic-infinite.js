@@ -1,5 +1,5 @@
 import { assignHarmonicRole, pickMotionType, ROLE_BEHAVIORS } from "./harmonic-roles.js";
-import { generateNextChord } from "./harmonic-chord-evolution.js";
+import { applyVoiceLeading, generateNextChord } from "./harmonic-chord-evolution.js";
 
 const noteNames = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 const COLOR_INTERVALS = [3, 4, 7, 9];
@@ -81,7 +81,7 @@ export function createHarmonicStateFromSection(section) {
 
   const rootCandidate = normalizePc(section.rootPc ?? voices[0]?.pc ?? 0);
   return evaluateHarmonicState({
-    voices: assignRolesForVoices(voices, rootCandidate),
+    voices: assignRolesForVoices(confineVoicesToRegister(voices), rootCandidate),
     rootCandidate,
     stabilityScore: 0,
     tensionScore: 0,
@@ -240,6 +240,50 @@ function moveSamePitchClassAbove(midi, minimum) {
   return result;
 }
 
+function getStateVoiceRanges(registerCenter) {
+  const voices = [
+    { offset: -12, below: 6,  above: 7 },
+    { offset:  -5, below: 7,  above: 7 },
+    { offset:   0, below: 7,  above: 9 },
+    { offset:   7, below: 10, above: 9 },
+  ];
+  return voices.map(({ offset, below, above }) => {
+    const center = registerCenter + offset;
+    return { min: center - below, max: center + above, center };
+  });
+}
+
+function confineVoicesToRegister(voices, settings = {}) {
+  const registerCenter = Number(settings.registerCenter ?? 60);
+  const ranges = getStateVoiceRanges(registerCenter);
+  const ordered = voices
+    .slice()
+    .sort((left, right) => left.midi - right.midi);
+  const confined = [];
+
+  ordered.forEach((voice, index) => {
+    const range = ranges[index] || ranges[ranges.length - 1];
+    let midi = octaveNear(voice.midi, range.center);
+    while (midi < range.min) midi += 12;
+    while (midi > range.max) midi -= 12;
+
+    const previous = confined[confined.length - 1];
+    if (previous) {
+      while (midi <= previous.midi && midi + 12 <= range.max) midi += 12;
+      while (midi > range.max && midi - 12 > previous.midi) midi -= 12;
+    }
+
+    confined.push({
+      ...voice,
+      midi,
+      pc: normalizePc(midi),
+      noteName: noteNameFromMidi(midi),
+    });
+  });
+
+  return confined;
+}
+
 function enforceVoiceOrder(voices, previousState) {
   const ordered = voices
     .slice()
@@ -369,11 +413,66 @@ export function evolveHarmonicState(previousState, options = {}) {
     ? normalizePc(nextChord.root)
     : chooseRootCandidate(ordered, previousState, options.targetRootPc, { ...settings, history }, profile, random);
   const stabilized = stabilizeState(ordered, rootCandidate, previousState, settings);
+  const registered = assignRolesForVoices(confineVoicesToRegister(stabilized, settings), rootCandidate);
 
   return evaluateHarmonicState({
-    voices: stabilized,
+    voices: registered,
     rootCandidate,
     movedVoices: movedVoices.length,
+    leapCount,
+    label: formatStateLabel(rootCandidate),
+  });
+}
+
+function stateToChordState(state) {
+  return {
+    notes: (state?.voices || []).map((voice) => ({
+      pitchClass: voice.pc,
+      midi: voice.midi,
+      voiceId: voice.voiceId,
+      role: voice.role,
+    })),
+  };
+}
+
+function alignRememberedState(state, currentState, settings = {}) {
+  if (!state || !currentState) return state;
+
+  const voiced = applyVoiceLeading({
+    root: state.rootCandidate,
+    pitchClasses: (state.voices || []).map((voice) => voice.pc),
+  }, stateToChordState(currentState), { settings });
+  const previousByVoiceId = new Map(currentState.voices.map((voice) => [voice.voiceId, voice]));
+  let leapCount = 0;
+  let movedVoices = 0;
+
+  const transformed = voiced.notes.map((note, index) => {
+    const previous = previousByVoiceId.get(note.voiceId) || currentState.voices[index] || currentState.voices[0];
+    const delta = note.midi - previous.midi;
+    const motionType = delta === 0 ? "stay" : Math.abs(delta) <= 2 ? "step" : "leap";
+    if (Math.abs(delta) >= 3) leapCount += 1;
+    if (delta !== 0) movedVoices += 1;
+
+    return {
+      ...previous,
+      midi: note.midi,
+      pc: normalizePc(note.midi),
+      changed: delta !== 0,
+      motionType,
+    };
+  });
+
+  const ordered = enforceVoiceOrder(transformed, currentState);
+  const rootCandidate = Number.isFinite(state.rootCandidate)
+    ? normalizePc(state.rootCandidate)
+    : normalizePc(state.voices?.[0]?.pc ?? ordered[0]?.pc ?? 0);
+  const stabilized = stabilizeState(ordered, rootCandidate, currentState, settings);
+  const registered = assignRolesForVoices(confineVoicesToRegister(stabilized, settings), rootCandidate);
+
+  return evaluateHarmonicState({
+    voices: registered,
+    rootCandidate,
+    movedVoices,
     leapCount,
     label: formatStateLabel(rootCandidate),
   });
@@ -383,14 +482,33 @@ export function buildInfiniteSections(seedSections, settings, seed, makeRandom) 
   return buildInfiniteSectionSequence(seedSections, settings, seed, seedSections.length, makeRandom);
 }
 
-function pickFromMemory(progression, random) {
-  const total = progression.reduce((sum, _, i) => sum + 1 / (progression.length - i), 0);
+function stateSignature(state) {
+  const root = Number.isFinite(state?.rootCandidate) ? normalizePc(state.rootCandidate) : -1;
+  const pcs = [...new Set((state?.voices || []).map((voice) => normalizePc(voice.pc ?? voice.midi)))]
+    .sort((left, right) => left - right)
+    .join(",");
+  return `${root}:${pcs}`;
+}
+
+function pickFromMemory(progression, random, options = {}) {
+  const excludedIndexes = new Set(options.excludeIndexes || []);
+  const excludedSignature = options.excludeSignature ?? null;
+  const candidates = progression.filter((state, index) =>
+    !excludedIndexes.has(index) && (!excludedSignature || stateSignature(state) !== excludedSignature));
+
+  if (!candidates.length) return null;
+
+  const total = candidates.reduce((sum, _, i) => sum + 1 / (candidates.length - i), 0);
   let cursor = random() * total;
-  for (let i = 0; i < progression.length; i++) {
-    cursor -= 1 / (progression.length - i);
-    if (cursor <= 0) return { state: progression[i], index: i };
+  for (let i = 0; i < candidates.length; i++) {
+    cursor -= 1 / (candidates.length - i);
+    if (cursor <= 0) {
+      const state = candidates[i];
+      return { state, index: progression.indexOf(state) };
+    }
   }
-  return { state: progression[progression.length - 1], index: progression.length - 1 };
+  const state = candidates[candidates.length - 1];
+  return { state, index: progression.indexOf(state) };
 }
 
 export function buildInfiniteSectionSequence(seedSections, settings, seed, totalSectionCount, makeRandom) {
@@ -410,11 +528,13 @@ export function buildInfiniteSectionSequence(seedSections, settings, seed, total
   const progression = [currentState];
   let currentMemIndex = 0;
   const memoryStrength = Number(settings.memoryStrength) || 0;
-  const useMemoryProb = 0.3 + memoryStrength * 0.5; // 0.3 at 0 (chaotic) → 0.8 at 1 (loop-heavy)
+  const useMemoryProb = 0.18 + memoryStrength * 0.56;
+  let consecutiveRepeatCount = 0;
 
   for (let index = 1; index < totalSectionCount; index += 1) {
     const skeleton = seedSections[index % seedSections.length];
     const targetRootPc = index < seedSections.length ? skeleton.rootPc : null;
+    const currentSignature = stateSignature(currentState);
 
     let nextState;
     const r = random();
@@ -427,24 +547,48 @@ export function buildInfiniteSectionSequence(seedSections, settings, seed, total
       currentMemIndex = progression.length - 1;
     } else {
       const memR = random();
-      if (memR < 0.5) {
-        // LOOP / RETURN: recall a chord from memory with recency bias
-        const picked = pickFromMemory(progression, random);
-        nextState = picked.state;
-        currentMemIndex = picked.index;
-      } else if (memR < 0.70) {
-        // REPEAT CURRENT: hold the present chord
+      const repeatCurrentProb = memoryStrength >= 0.4 ? (memoryStrength - 0.4) * 0.2 : 0;
+      const mutationProb = 0.24;
+      const recallProb = Math.max(0, 1 - mutationProb - repeatCurrentProb);
+
+      if (memR < recallProb) {
+        // LOOP / RETURN: recall remembered material, but avoid the current chord
+        const picked = pickFromMemory(progression, random, {
+          excludeIndexes: [currentMemIndex],
+          excludeSignature: currentSignature,
+        });
+        if (picked) {
+          nextState = alignRememberedState(picked.state, currentState, settings);
+          currentMemIndex = picked.index;
+        } else {
+          nextState = evolveHarmonicState(currentState, { random, settings, targetRootPc, history });
+          progression.push(nextState);
+          if (progression.length > MAX_MEMORY) progression.shift();
+          currentMemIndex = progression.length - 1;
+        }
+      } else if (memR < recallProb + mutationProb) {
+        // MUTATION: evolve from remembered material without anchoring to the current chord
+        const picked = pickFromMemory(progression, random, {
+          excludeIndexes: [currentMemIndex],
+          excludeSignature: currentSignature,
+        });
+        const base = picked?.state ? alignRememberedState(picked.state, currentState, settings) : currentState;
+        nextState = evolveHarmonicState(base, { random, settings, targetRootPc, history });
+        progression.push(nextState);
+        if (progression.length > MAX_MEMORY) progression.shift();
+        currentMemIndex = progression.length - 1;
+      } else if (consecutiveRepeatCount === 0) {
+        // HOLD: only allow explicit back-to-back repetition when memory is intentionally strong
         nextState = progression[currentMemIndex];
       } else {
-        // MUTATION: evolve from a remembered chord (not necessarily the current one)
-        const base = pickFromMemory(progression, random).state;
-        nextState = evolveHarmonicState(base, { random, settings, targetRootPc, history });
+        nextState = evolveHarmonicState(currentState, { random, settings, targetRootPc, history });
         progression.push(nextState);
         if (progression.length > MAX_MEMORY) progression.shift();
         currentMemIndex = progression.length - 1;
       }
     }
 
+    consecutiveRepeatCount = stateSignature(nextState) === currentSignature ? consecutiveRepeatCount + 1 : 0;
     currentState = nextState;
     generated.push(stateToSection(currentState, skeleton, index, templateLoopBeats, seedSections.length));
     history.push(currentState);

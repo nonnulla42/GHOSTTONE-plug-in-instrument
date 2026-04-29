@@ -662,6 +662,12 @@ function bassGravityWeight(voicedNotes) {
   return Math.max(0.55, 1 - (bass - bassSoftMax) / 22);
 }
 
+function upperRegisterCeilingWeight(currentMean, targetMean) {
+  const softCeiling = targetMean + 6;
+  if (currentMean <= softCeiling) return 1;
+  return Math.max(0.28, 1 - (currentMean - softCeiling) / 10);
+}
+
 function shouldProtectInversionContinuity({ candidate, nearestTarget, previous, previousNotes, roleTarget }) {
   const role = previous.role || "color";
   const wasBass = previous.midi <= chordBass(previousNotes) + 0.001;
@@ -682,7 +688,10 @@ function shouldProtectInversionContinuity({ candidate, nearestTarget, previous, 
 function blendedVoiceTarget({ candidate, pitchClasses, previous, previousNotes, range, rolePc, settings }) {
   const voicingContinuity = Number(settings?.voicingContinuity ?? 0.65);
   const continuityModifier = clamp(0.4 + (1 - voicingContinuity) * 1.6, 0.1, 2.0);
-  const continuityTarget = previous.midi * 0.72 + range.center * 0.28;
+  const registerOffset = Math.abs(previous.midi - range.center);
+  const centerRecovery = clamp(registerOffset / 18, 0, 0.3);
+  const continuityWeight = 0.72 - centerRecovery;
+  const continuityTarget = previous.midi * continuityWeight + range.center * (1 - continuityWeight);
   const roleTarget = midiInRangeForVoice(rolePc, range, continuityTarget);
   const nearestTarget = nearestChordMidi(pitchClasses, range, previous.midi, previous.pitchClass);
   let weight = clamp(roleWeight(previous.role) * continuityModifier, 0, 1);
@@ -822,6 +831,7 @@ function repetitionPenalty(voicedChord, options = {}) {
 export function scoreCandidate(candidate, current, options = {}) {
   const settings = options.settings || {};
   const profile = getMotionProfile(settings.harmonicMotion ?? 0.3);
+  const registerCenter = Number(settings.registerCenter ?? 60);
   const similarityStrength = similarityRuleStrength(settings);
   const commonToneCount = countCommonPitchClasses(candidate, current);
   const similarityDetails = candidate.similarityDetails || computeChordSimilarityDetails(candidate, current, options);
@@ -850,7 +860,13 @@ export function scoreCandidate(candidate, current, options = {}) {
   const motionAmountBonus = voiced.totalMovement * profile.motionAmountFactor;
   const pitchCenterPenalty = computePitchCenterPenalty({ notes: voiced.notes }, current, options);
   const directionWeight = directionalMovementWeight(signedMovements, settings);
-  const gravityWeight = directionWeight;
+  const voicedCenter = chordCenter(voiced.notes);
+  const historicalCenter = getHistoricalRegisterCenter(current, options);
+  const registerTarget = registerCenter * 0.82 + historicalCenter * 0.18;
+  const registerWeight = getRegisterDriftWeight(voicedCenter, registerTarget);
+  const bassWeight = bassGravityWeight(voiced.notes);
+  const ceilingWeight = upperRegisterCeilingWeight(voicedCenter, registerTarget);
+  const gravityWeight = directionWeight * registerWeight * bassWeight * ceilingWeight;
   // Local target-root preference is strongest at low harmonicMotion. As motion
   // rises, this guidance backs off so the final choice is decided more by the
   // voiced chord's continuity and movement cost.
@@ -888,6 +904,9 @@ export function scoreCandidate(candidate, current, options = {}) {
     pitchCenterPenalty,
     directionWeight,
     gravityWeight,
+    registerWeight,
+    bassWeight,
+    ceilingWeight,
     localTargetBonus,
     repetitionPenalty: repeatPenalty,
   };

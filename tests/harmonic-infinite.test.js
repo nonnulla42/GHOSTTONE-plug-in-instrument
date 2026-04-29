@@ -160,3 +160,57 @@ test("longer infinite evolution keeps the register from drifting upward", () => 
   assert.ok(Math.max(...centers) <= 72);
   assert.ok(finalCenter - initialCenter < 10);
 });
+
+test("high harmonic motion still respects register gravity", () => {
+  const skeleton = [
+    seedSection("Am9", 0, 4),
+    seedSection("Fmaj7", 4, 4),
+    seedSection("Cadd9", 8, 4),
+    seedSection("Gsus4", 12, 4),
+  ];
+
+  for (let seed = 1; seed <= 12; seed += 1) {
+    const sections = buildInfiniteSectionSequence(skeleton, {
+      harmonicMotion: 1,
+      harmonyLock: 0.1,
+      stayMusical: true,
+      registerCenter: 60,
+    }, seed, 32, makeRandom);
+    const centers = sections.map((section) => {
+      const sum = section.notes.reduce((total, note) => total + note.midi, 0);
+      return sum / section.notes.length;
+    });
+
+    assert.ok(Math.max(...centers) <= 64);
+    assert.ok(centers[centers.length - 1] - centers[0] <= 2);
+  }
+});
+
+test("low memory strength avoids excessive immediate chord repeats", () => {
+  const skeleton = [
+    seedSection("Am9", 0, 4),
+    seedSection("Fmaj7", 4, 4),
+    seedSection("Cadd9", 8, 4),
+    seedSection("Gsus4", 12, 4),
+  ];
+  let immediateRepeats = 0;
+  let transitions = 0;
+
+  for (let seed = 1; seed <= 24; seed += 1) {
+    const sections = buildInfiniteSectionSequence(skeleton, {
+      harmonicMotion: 0.3,
+      harmonyLock: 0.6,
+      stayMusical: true,
+      memoryStrength: 0,
+    }, seed, 16, makeRandom);
+
+    for (let index = 1; index < sections.length; index += 1) {
+      transitions += 1;
+      const previous = sections[index - 1].notes.map((note) => note.pc).join(",");
+      const current = sections[index].notes.map((note) => note.pc).join(",");
+      if (current === previous) immediateRepeats += 1;
+    }
+  }
+
+  assert.ok(immediateRepeats / transitions < 0.04);
+});
