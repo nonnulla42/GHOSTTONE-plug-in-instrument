@@ -11,8 +11,8 @@ function cloneTemplateSections(sections) {
 }
 
 export function createInfiniteStreamRuntime(pattern, settings, seed, options = {}) {
-  if (!pattern || pattern.generatorMode !== "infinite") {
-    throw new TypeError("createInfiniteStreamRuntime requires an infinite pattern");
+  if (!pattern || !["infinite", "infinitePhrase"].includes(pattern.generatorMode)) {
+    throw new TypeError("createInfiniteStreamRuntime requires an infinite-mode pattern");
   }
 
   const templateSections = cloneTemplateSections(pattern.templateSections || pattern.sections);

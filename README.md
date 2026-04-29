@@ -33,7 +33,7 @@ It is not a static chord-player anymore. It is closer to a small musical system 
 
 ## Current Modes
 
-There are three meaningful generator modes in the codebase:
+There are four meaningful generator modes in the codebase:
 
 ### `classic`
 
@@ -64,6 +64,16 @@ This is the most ambitious mode.
 - applies register gravity and voicing rules afterward
 
 This is the part of the project where most of the current complexity lives.
+
+### `infinitePhrase`
+
+Uses the same infinite harmonic engine as `infinite`, but realizes it as a single phrase line instead of pad or arp-style chord events.
+
+- reuses the evolving infinite sections as harmonic source
+- builds short beat-based phrases inside each section
+- mixes current chord tones with global-scale and local-scale degrees
+- keeps note mobility equal across the line
+- uses `registerCenter` as soft long-term gravity so the phrase does not drift away
 
 ## Harmonic Model In Infinite
 

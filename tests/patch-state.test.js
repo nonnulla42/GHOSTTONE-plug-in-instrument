@@ -109,6 +109,20 @@ test("patch conversion preserves role-based generator mode", () => {
   assert.equal(patchToCoreSettings(patch).harmonicMotion, 1);
 });
 
+test("patch conversion preserves infinite phrase generator mode", () => {
+  const patch = createDefaultPatch({
+    core: {
+      ...createDefaultPatch().core,
+      generatorMode: "infinitePhrase",
+      harmonicMotion: 64,
+    },
+  });
+
+  assert.equal(patch.core.generatorMode, "infinitePhrase");
+  assert.equal(patchToCoreSettings(patch).generatorMode, "infinitePhrase");
+  assert.equal(patchToCoreSettings(patch).harmonicMotion, 0.64);
+});
+
 test("patch conversion preserves harmonic distance controls", () => {
   const patch = createDefaultPatch({
     core: {

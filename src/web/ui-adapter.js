@@ -232,5 +232,6 @@ function capitalize(value) {
 
 function formatGeneratorMode(value) {
   if (value === "infinite") return "infinite";
+  if (value === "infinitePhrase") return "infinite phrase";
   return value === "roleBased" ? "role-based" : "classic";
 }

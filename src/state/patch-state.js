@@ -252,7 +252,7 @@ export function clonePatchState(state) {
 
 function normalizeCore(core = {}) {
   return {
-    generatorMode: ["classic", "roleBased", "infinite"].includes(core.generatorMode) ? core.generatorMode : DEFAULT_PATCH.core.generatorMode,
+    generatorMode: ["classic", "roleBased", "infinite", "infinitePhrase"].includes(core.generatorMode) ? core.generatorMode : DEFAULT_PATCH.core.generatorMode,
     harmonicMotion: clampNumber(core.harmonicMotion, 0, 100, DEFAULT_PATCH.core.harmonicMotion),
     harmonicDistanceTarget: normalizeInt(core.harmonicDistanceTarget, DEFAULT_PATCH.core.harmonicDistanceTarget, 0) % 12,
     harmonicDistanceFalloff: clampNumber(core.harmonicDistanceFalloff, 0, 6, DEFAULT_PATCH.core.harmonicDistanceFalloff),

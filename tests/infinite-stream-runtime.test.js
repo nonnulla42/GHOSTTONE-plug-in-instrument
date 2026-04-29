@@ -180,6 +180,34 @@ test("streaming infinite avoids excessive immediate repeats at low memory", () =
   assert.ok(averageRepeatRate < 0.03);
 });
 
+test("streaming infinite phrase extends with phrase events and absolute beats", () => {
+  const settings = {
+    generatorMode: "infinitePhrase",
+    harmonicMotion: 0.24,
+    harmonyLock: 0.52,
+    stayMusical: true,
+    localScaleType: "minor",
+    localTargetDegree: 5,
+    globalRoot: "0",
+    scaleName: "major",
+    scaleInfluence: 0.44,
+    arpDensity: 0.6,
+  };
+  const pattern = generatePattern(settings, progression, 7201);
+  const runtime = createInfiniteStreamRuntime(pattern, settings, 7201, {
+    initialLoopCount: 1,
+    extendLoopCount: 1,
+    lowWaterBeats: 16,
+  });
+
+  ensureInfiniteBeats(runtime, 15.8);
+
+  assert.ok(pattern.loopBeats > pattern.templateLoopBeats);
+  assert.ok(pattern.events.some((event) => event.startBeat >= pattern.templateLoopBeats));
+  assert.ok(pattern.events.every((event) => event.role === "phrase"));
+  assert.ok(pattern.events.every((event) => event.motionType === "infinitePhrase"));
+});
+
 function averageAdjacentSimilarity(sections) {
   const scores = [];
   for (let index = 1; index < sections.length; index += 1) {

@@ -318,6 +318,83 @@ test("infinite arp events avoid upward register ratcheting", () => {
   });
 });
 
+test("infinite phrase is deterministic and emits phrase-tagged events", () => {
+  const settings = {
+    generatorMode: "infinitePhrase",
+    harmonicMotion: 0.22,
+    harmonyLock: 0.58,
+    stayMusical: true,
+    ghostEnabled: false,
+    localScaleType: "minor",
+    localTargetDegree: 5,
+    globalRoot: "0",
+    scaleName: "major",
+    scaleInfluence: 0.48,
+    arpDensity: 0.6,
+    registerCenter: 60,
+  };
+
+  const first = generatePattern(settings, progression, 14001);
+  const second = generatePattern(settings, progression, 14001);
+
+  assert.deepEqual(second, first);
+  assert.ok(first.events.length > first.sections.length);
+  assert.ok(first.events.every((event) => event.role === "phrase"));
+  assert.ok(first.events.every((event) => event.motionType === "infinitePhrase"));
+  assert.ok(first.events.every((event) => event.voiceId === 0));
+});
+
+test("infinite phrase keeps the harmonic sections intact while changing only event realization", () => {
+  const settings = {
+    harmonicMotion: 0.3,
+    harmonyLock: 0.52,
+    stayMusical: true,
+    ghostEnabled: false,
+    localScaleType: "major",
+    localTargetDegree: 3,
+    globalRoot: "0",
+    scaleName: "major",
+    scaleInfluence: 0.45,
+    arpDensity: 0.5,
+  };
+  const infinite = generatePattern({ ...settings, generatorMode: "infinite", mode: "pad" }, cmaj7Progression(), 14002);
+  const phrase = generatePattern({ ...settings, generatorMode: "infinitePhrase", mode: "pad" }, cmaj7Progression(), 14002);
+
+  assert.deepEqual(
+    phrase.sections.map((section) => section.notes.map((note) => [note.pc, note.midi])),
+    infinite.sections.map((section) => section.notes.map((note) => [note.pc, note.midi])),
+  );
+  assert.ok(infinite.events.every((event) => event.role !== "phrase"));
+  assert.ok(phrase.events.every((event) => event.role === "phrase"));
+  assert.notEqual(phrase.events.length, infinite.events.length);
+});
+
+test("infinite phrase keeps its register centered over long playback", () => {
+  const result = generatePattern({
+    generatorMode: "infinitePhrase",
+    harmonicMotion: 0.82,
+    harmonyLock: 0.4,
+    stayMusical: true,
+    ghostEnabled: false,
+    localScaleType: "minor",
+    localTargetDegree: 4,
+    globalRoot: "2",
+    scaleName: "minor",
+    scaleInfluence: 0.52,
+    arpDensity: 0.78,
+    voicingVariation: 0.42,
+    voicingContinuity: 0.76,
+    registerCenter: 60,
+  }, cmaj7Progression(16), 14003);
+  const midis = result.events.map((event) => event.midi);
+  const chunkAverages = chunk(result.events, 16).map((events) => average(events.map((event) => event.midi)));
+
+  assert.ok(Math.abs(average(midis) - 60) <= 5);
+  assert.ok(Math.max(...midis) <= 79);
+  assert.ok(Math.min(...midis) >= 41);
+  assert.ok(Math.abs(chunkAverages[chunkAverages.length - 1] - chunkAverages[0]) <= 4.5);
+});
+
 function range(values) {
   return Math.max(...values) - Math.min(...values);
 }
@@ -328,4 +405,16 @@ function maxAbs(values) {
 
 function sum(values) {
   return values.reduce((total, value) => total + value, 0);
+}
+
+function average(values) {
+  return values.reduce((total, value) => total + value, 0) / Math.max(1, values.length);
+}
+
+function chunk(values, size) {
+  const chunks = [];
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+  return chunks;
 }

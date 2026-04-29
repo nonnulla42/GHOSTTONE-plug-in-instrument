@@ -18,7 +18,7 @@ The engine is a pure musical generator. It does not read UI controls, schedule a
 
 Core musical controls:
 
-- `generatorMode`: `classic`, `roleBased`, or `infinite`
+- `generatorMode`: `classic`, `roleBased`, `infinite`, or `infinitePhrase`
 - `mode`: `pad` or `arp`
 - `ghostAmount`: microtonal intensity, normalized `0..1`
 - `drift`: pitch movement amount, normalized `0..1`
@@ -34,7 +34,7 @@ Core musical controls:
 - `arpDensity`: event count density, normalized `0..1`
 - `arpContinuity`: strength of arp contour continuity, normalized `0..1`
 
-Additional harmonic controls used mainly by `infinite`:
+Additional harmonic controls used mainly by `infinite` and `infinitePhrase`:
 
 - `harmonicMotion`: balance between local harmonic direction and minimum displacement, normalized `0..1`
 - `harmonicDistanceTarget`: preferred root distance target in semitones or equivalent class distance
@@ -71,7 +71,7 @@ When `split` is true, the first two slots divide the bar equally.
 
 In `classic` and `roleBased`, this progression is the direct harmonic source.
 
-In `infinite`, it acts more like a seed skeleton and launch point for later harmonic state generation.
+In `infinite` and `infinitePhrase`, it acts more like a seed skeleton and launch point for later harmonic state generation.
 
 ### `seed`
 
@@ -93,7 +93,7 @@ Positive integer seed. Same settings, same progression, and same seed must produ
 }
 ```
 
-`templateLoopBeats` and `templateSections` are especially relevant when `generatorMode === "infinite"`, where the initial template can later be extended by the streaming runtime.
+`templateLoopBeats` and `templateSections` are especially relevant when `generatorMode` is an infinite-mode variant, where the initial template can later be extended by the streaming runtime.
 
 ### Sections
 
@@ -113,7 +113,7 @@ A section is one chord slot placed on the beat grid:
 }
 ```
 
-In infinite mode, later sections may be generated rather than copied directly from the written progression.
+In infinite-mode generators, later sections may be generated rather than copied directly from the written progression.
 
 ### Events
 
@@ -174,6 +174,15 @@ Important current rule of thumb:
 - local scale is directional force inside that fence
 - low `harmonicMotion` favors local-scale behavior more
 - high `harmonicMotion` favors minimum displacement more
+
+### `infinitePhrase`
+
+Uses the same infinite harmonic sections as `infinite`, but emits phrase events instead of pad or arp-style chord realization.
+
+- harmony still comes from the infinite chord engine
+- phrase notes are chosen from current chord tones plus active global and local scale degrees
+- note mobility is uniform across the phrase
+- `registerCenter` remains the soft long-term gravity for the line
 
 ## Field Semantics
 

@@ -6,6 +6,7 @@ import {
   resolveDurationBeats,
 } from "./harmonic-roles.js";
 import { buildInfiniteSections } from "./harmonic-infinite.js";
+import { buildInfinitePhraseEvents } from "./infinite-phrase.js";
 
 const noteMap = {
   C: 0,
@@ -113,7 +114,7 @@ function normalizeSettings(settings = {}) {
   const merged = { ...defaultSettings, ...settings };
   return {
     ...merged,
-    generatorMode: ["classic", "roleBased", "infinite"].includes(merged.generatorMode) ? merged.generatorMode : defaultSettings.generatorMode,
+    generatorMode: ["classic", "roleBased", "infinite", "infinitePhrase"].includes(merged.generatorMode) ? merged.generatorMode : defaultSettings.generatorMode,
     harmonicMotion: (Number.isFinite(Number(merged.harmonicMotion)) ? Math.max(0, Math.min(1, Number(merged.harmonicMotion))) : defaultSettings.harmonicMotion),
     harmonicDistanceTarget: normalizeDistanceTarget(merged.harmonicDistanceTarget, defaultSettings.harmonicDistanceTarget),
     harmonicDistanceFalloff: normalizeDistanceFalloff(merged.harmonicDistanceFalloff, defaultSettings.harmonicDistanceFalloff),
@@ -845,6 +846,11 @@ function generateRoleBasedEvents(events, sections, settings, normalizedSeed) {
 export function buildPatternEventsForSections(sections, settings = {}, seed = 1) {
   const normalizedSettings = normalizeSettings(settings);
   const normalizedSeed = seedToInt(seed);
+
+  if (normalizedSettings.generatorMode === "infinitePhrase") {
+    return buildInfinitePhraseEvents(sections, normalizedSettings, normalizedSeed, makeRandom);
+  }
+
   const events = [];
 
   if (normalizedSettings.generatorMode === "roleBased" || normalizedSettings.generatorMode === "infinite") {
@@ -863,7 +869,7 @@ export function generatePattern(settings = {}, progression = defaultProgression,
   const templateSections = buildSections(normalizedProgression, normalizedSettings, normalizedSeed);
   let sections = templateSections;
 
-  if (normalizedSettings.generatorMode === "infinite") {
+  if (normalizedSettings.generatorMode === "infinite" || normalizedSettings.generatorMode === "infinitePhrase") {
     sections = buildInfiniteSections(sections, normalizedSettings, normalizedSeed, makeRandom);
   }
   const events = buildPatternEventsForSections(sections, normalizedSettings, normalizedSeed);

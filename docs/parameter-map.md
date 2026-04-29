@@ -58,13 +58,14 @@ It is not a math spec. It is a "what family does this control belong to, and wha
 
 ## Harmony Layer
 
-These parameters decide what harmony the engine wants, especially in `infinite`.
+These parameters decide what harmony the engine wants, especially in `infinite` and `infinitePhrase`.
 
 ### `generatorMode`
 
 - `classic`: uses the written progression directly
 - `roleBased`: still uses the written progression directly, but note behavior follows harmonic role
 - `infinite`: uses the progression as a seed skeleton, then keeps generating future harmonic states
+- `infinitePhrase`: uses the infinite harmonic engine, but emits a single phrase line instead of pad or arp-style chord realization
 
 This is the first fork in behavior.
 
@@ -72,7 +73,7 @@ This is the first fork in behavior.
 
 In `classic` and `roleBased`, the chord grid is the actual harmony.
 
-In `infinite`, the chord grid is the launch point and initial identity, not the whole future result.
+In `infinite` and `infinitePhrase`, the chord grid is the launch point and initial identity, not the whole future result.
 
 ### `globalRoot`, `scaleName`, `scaleInfluence`
 
@@ -104,7 +105,7 @@ Current intent:
 
 ### `harmonicMotion`
 
-This is one of the most important parameters in `infinite`.
+This is one of the most important parameters in `infinite` and `infinitePhrase`.
 
 It controls the balance between:
 
@@ -129,7 +130,7 @@ These are secondary steering controls compared to `harmonicMotion`, but they sti
 
 ### `memoryStrength`
 
-This gives local structure over time, especially in `infinite`.
+This gives local structure over time, especially in `infinite` and `infinitePhrase`.
 
 It affects how strongly the engine:
 
@@ -203,7 +204,7 @@ It acts like a soft center of mass for the harmonic body:
 - keeps voice lanes usable
 - does not hard-lock every note to one zone
 
-This matters a lot in `infinite`, especially over long playback.
+This matters a lot in `infinite` and `infinitePhrase`, especially over long playback.
 
 ### `mode`
 

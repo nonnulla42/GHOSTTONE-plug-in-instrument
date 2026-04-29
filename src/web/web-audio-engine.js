@@ -55,6 +55,10 @@ export function scheduleBrowserEvents(events, context) {
   return scheduleEventsForBlock(events, block);
 }
 
+function isInfiniteGeneratorMode(value) {
+  return value === "infinite" || value === "infinitePhrase";
+}
+
 export class WebAudioEngine {
   constructor({ lookaheadSeconds = 0.18, tickMs = 45 } = {}) {
     this.lookaheadSeconds = lookaheadSeconds;
@@ -156,7 +160,7 @@ export class WebAudioEngine {
     this.isPlaying = true;
     this.loopStartTime = ctx.currentTime + 0.05;
     this.lastScheduledBeat = null;
-    this.streamRuntime = pattern.generatorMode === "infinite"
+    this.streamRuntime = isInfiniteGeneratorMode(pattern.generatorMode)
       ? createInfiniteStreamRuntime(pattern, coreSettings, pattern.seed || 1)
       : null;
     if (this.streamRuntime) {
@@ -217,7 +221,7 @@ export class WebAudioEngine {
         this.currentCoreSettings = coreSettings;
         this.currentSoundSettings = soundSettings;
         this.currentBpm = bpm;
-        if (pattern.generatorMode === "infinite") {
+        if (isInfiniteGeneratorMode(pattern.generatorMode)) {
           this.streamRuntime = createInfiniteStreamRuntime(pattern, coreSettings, pattern.seed || 1);
         } else {
           this.streamRuntime = null;
@@ -311,7 +315,7 @@ export class WebAudioEngine {
   getCurrentBeat(bpm, patternOrLoopBeats) {
     if (!this.isPlaying || !this.audio) return null;
 
-    const isInfinite = typeof patternOrLoopBeats === "object" && patternOrLoopBeats?.generatorMode === "infinite";
+    const isInfinite = typeof patternOrLoopBeats === "object" && isInfiniteGeneratorMode(patternOrLoopBeats?.generatorMode);
     const loopBeats = typeof patternOrLoopBeats === "object" ? patternOrLoopBeats.loopBeats : patternOrLoopBeats;
     const secondsPerBeat = 60 / bpm;
     const elapsedSeconds = Math.max(0, this.audio.ctx.currentTime - this.loopStartTime);

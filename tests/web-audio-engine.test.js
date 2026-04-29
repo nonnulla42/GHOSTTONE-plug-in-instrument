@@ -118,6 +118,7 @@ test("getCurrentBeat wraps classic playback but stays absolute for infinite play
 
   assert.equal(engine.getCurrentBeat(120, 16), 4);
   assert.equal(engine.getCurrentBeat(120, { generatorMode: "infinite", loopBeats: 32 }), 20);
+  assert.equal(engine.getCurrentBeat(120, { generatorMode: "infinitePhrase", loopBeats: 32 }), 20);
 });
 
 function event(id, startBeat) {
