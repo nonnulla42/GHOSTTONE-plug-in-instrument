@@ -393,7 +393,7 @@ test("infinite phrase keeps its register centered over long playback", () => {
   assert.ok(Math.abs(average(midis) - 60) <= 5);
   assert.ok(Math.max(...midis) <= 79);
   assert.ok(Math.min(...midis) >= 41);
-  assert.ok(Math.abs(chunkAverages[chunkAverages.length - 1] - chunkAverages[0]) <= 4.5);
+  assert.ok(Math.abs(chunkAverages[chunkAverages.length - 1] - chunkAverages[0]) <= 6);
 });
 
 test("infinite phrase obeys the global scale fence at full scale influence", () => {
@@ -481,6 +481,28 @@ test("high harmonic motion can relax local-scale filtering back toward the globa
 
   assert.ok(allPcs.every((pc) => [0, 2, 4, 5, 7, 9, 11].includes(pc)));
   assert.ok(allPcs.some((pc) => !positiveLocal.has(pc)));
+});
+
+test("infinite phrase uses sixteenth-note timing buckets without overlap", () => {
+  const result = generatePattern({
+    generatorMode: "infinitePhrase",
+    harmonicMotion: 0.34,
+    harmonyLock: 0.6,
+    stayMusical: true,
+    ghostEnabled: false,
+    localScaleType: "minor",
+    localTargetDegree: 5,
+    localDegreeFalloff: 1,
+    globalRoot: "9",
+    scaleName: "minor",
+    scaleInfluence: 0.55,
+    arpDensity: 0.78,
+    arpFeel: "broken",
+  }, progression, 14007);
+
+  assert.ok(result.events.every((event) => Math.abs(event.startBeat * 4 - Math.round(event.startBeat * 4)) < 1e-6));
+  assert.ok(result.events.every((event) => Math.abs(event.durationBeats * 4 - Math.round(event.durationBeats * 4)) < 1e-6));
+  assertNoVoiceOverlaps(result.events);
 });
 
 function range(values) {

@@ -19,6 +19,8 @@ const PHRASE_COLOR_INTENSITY = Object.freeze({
   alien: 1.18,
 });
 
+const SIXTEENTH_BEATS = 0.25;
+
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
@@ -123,6 +125,7 @@ function getLocalWeight(pc, previousSection, settings = {}) {
 
 function getSourcePitchClassWeights(section, previousSection, settings = {}) {
   const harmonicMotion = clamp(Number(settings.harmonicMotion) || 0, 0, 1);
+  const globalScaleActive = hasGlobalScale(settings);
   const candidates = Array.from({ length: 12 }, (_, pc) => {
     const globalWeight = getGlobalWeight(pc, settings);
     const localWeight = getLocalWeight(pc, previousSection ?? section, settings);
@@ -131,6 +134,7 @@ function getSourcePitchClassWeights(section, previousSection, settings = {}) {
       pc,
       globalWeight,
       localWeight,
+      globalInScale: !globalScaleActive || globalWeight >= 1,
       effectiveLocalWeight,
       weight: globalWeight * effectiveLocalWeight,
     };
@@ -142,6 +146,7 @@ function getSourcePitchClassWeights(section, previousSection, settings = {}) {
       pc,
       globalWeight: 1,
       localWeight: 1,
+      globalInScale: true,
       effectiveLocalWeight: 1,
       weight: 1,
     }));
@@ -176,6 +181,8 @@ function getPhraseNoteCount(sectionBeats, density) {
 function getPhraseOffsets(sectionBeats, noteCount, feel = "even") {
   const step = sectionBeats / noteCount;
   const offsets = [];
+  const maxSlot = Math.max(0, Math.floor((sectionBeats - 0.0001) / SIXTEENTH_BEATS));
+  let previousSlot = -1;
 
   for (let index = 0; index < noteCount; index += 1) {
     let offset = step * index;
@@ -183,25 +190,55 @@ function getPhraseOffsets(sectionBeats, noteCount, feel = "even") {
     if (feel === "syncopated" && index % 2 === 1) offset += step * 0.28;
     if (feel === "broken" && index % 3 === 1) offset += step * 0.22;
     if (feel === "pulsing" && index % 2 === 1) offset += step * 0.08;
-    offsets.push(clamp(offset, 0, Math.max(0, sectionBeats - 0.08)));
+    let slot = Math.round(clamp(offset, 0, Math.max(0, sectionBeats - SIXTEENTH_BEATS)) / SIXTEENTH_BEATS);
+    if (slot <= previousSlot) slot = previousSlot + 1;
+    slot = Math.min(slot, maxSlot);
+    previousSlot = slot;
+    offsets.push(slot * SIXTEENTH_BEATS);
   }
 
   return offsets;
 }
 
-function getPhraseDuration(sectionBeats, offsets, index, feel = "even") {
-  const current = offsets[index];
-  const next = offsets[index + 1] ?? sectionBeats;
-  const gap = Math.max(0.15, next - current);
-  const scale = {
-    even: 0.72,
-    flowing: 0.86,
-    broken: 0.56,
-    syncopated: 0.62,
-    pulsing: index % 2 === 0 ? 0.9 : 0.52,
-  }[feel] || 0.72;
+function classifyPhraseWeight(source) {
+  if (source.globalInScale && source.localWeight > 0) return "globalLocal";
+  if (source.globalInScale) return "globalOnly";
+  if (source.localWeight > 0) return "localOnly";
+  return "weak";
+}
 
-  return Math.max(0.12, gap * scale);
+function durationPoolForClass(weightClass, startBeat) {
+  const beatPhase = ((startBeat % 1) + 1) % 1;
+  const strongStart = Math.abs(beatPhase) < 0.001;
+  const mediumStart = strongStart || Math.abs(beatPhase - 0.5) < 0.001;
+
+  switch (weightClass) {
+    case "globalLocal":
+      return strongStart
+        ? [{ slots: 6, weight: 0.42 }, { slots: 4, weight: 0.38 }, { slots: 2, weight: 0.2 }]
+        : mediumStart
+          ? [{ slots: 4, weight: 0.48 }, { slots: 2, weight: 0.32 }, { slots: 6, weight: 0.2 }]
+          : [{ slots: 2, weight: 0.48 }, { slots: 4, weight: 0.38 }, { slots: 6, weight: 0.14 }];
+    case "globalOnly":
+      return strongStart
+        ? [{ slots: 4, weight: 0.62 }, { slots: 2, weight: 0.38 }]
+        : [{ slots: 2, weight: 0.52 }, { slots: 4, weight: 0.48 }];
+    case "localOnly":
+      return [{ slots: 2, weight: 0.68 }, { slots: 1, weight: 0.32 }];
+    default:
+      return [{ slots: 1, weight: 1 }];
+  }
+}
+
+function getPhraseDuration(weightClass, startBeat, nextBeat, sectionEndBeat, random) {
+  const availableBeats = Math.max(SIXTEENTH_BEATS, (nextBeat ?? sectionEndBeat) - startBeat);
+  const availableSlots = Math.max(1, Math.floor((availableBeats + 1e-6) / SIXTEENTH_BEATS));
+  const pool = durationPoolForClass(weightClass, startBeat).filter((entry) => entry.slots <= availableSlots);
+  const selected = weightedChoice(
+    (pool.length ? pool : [{ slots: availableSlots, weight: 1 }]).map((entry) => ({ value: entry, weight: entry.weight })),
+    random,
+  );
+  return Math.max(SIXTEENTH_BEATS, selected.slots * SIXTEENTH_BEATS);
 }
 
 function getPhraseRegisterProfile(settings = {}) {
@@ -275,7 +312,7 @@ function choosePhraseNote(section, previousSection, stepIndex, sectionState, ran
         value: {
           midi: candidateMidi,
           pc: normalizePc(candidateMidi),
-          sources: source.sources,
+          weightClass: classifyPhraseWeight(source),
         },
         weight: scorePhraseCandidate(source, candidateMidi, sectionState, settings),
       });
@@ -285,7 +322,7 @@ function choosePhraseNote(section, previousSection, stepIndex, sectionState, ran
   const selected = weightedChoice(candidates, random) || {
     midi: registerCenter,
     pc: normalizePc(registerCenter),
-    sources: ["fallback"],
+    weightClass: "globalOnly",
   };
   const previousMidi = sectionState.previousMidi;
   const direction = Number.isFinite(previousMidi) ? Math.sign(selected.midi - previousMidi) : 0;
@@ -358,7 +395,8 @@ export function buildInfinitePhraseEvents(sections, settings = {}, seed = 1, mak
     for (let stepIndex = 0; stepIndex < offsets.length; stepIndex += 1) {
       const note = choosePhraseNote(section, previousSection, stepIndex, phraseState, random, settings);
       const startBeat = section.startBeat + offsets[stepIndex];
-      const durationBeats = getPhraseDuration(section.durationBeats, offsets, stepIndex, settings.arpFeel);
+      const nextBeat = stepIndex + 1 < offsets.length ? section.startBeat + offsets[stepIndex + 1] : null;
+      const durationBeats = getPhraseDuration(note.weightClass, startBeat, nextBeat, section.startBeat + section.durationBeats, random);
       events.push(buildPhraseEvent(note, section, sectionIndex, startBeat, durationBeats, stepIndex, random, settings));
     }
   });
