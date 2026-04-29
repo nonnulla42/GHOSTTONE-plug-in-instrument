@@ -1,8 +1,8 @@
 # GhostTone Plugin-First Roadmap
 
-This repository is now focused on the plugin path.
+This repository is moving toward the plugin path, but the browser body is still an active development surface.
 
-The browser prototype can remain useful as reference material, but the main asset is the headless musical engine in `src/core/ghosttone-core.js`.
+The main long-term asset is the headless musical engine in `src/core/ghosttone-core.js`.
 
 ## Current Core Contract
 
@@ -26,8 +26,11 @@ It returns:
   settings,
   progression,
   loopBeats,
+  templateLoopBeats,
+  templateSections,
   sections,
-  events
+  events,
+  generatorMode
 }
 ```
 
@@ -55,10 +58,11 @@ Each event uses the plugin-facing schema:
 
 ## Next Steps
 
-1. Keep expanding tests around deterministic generation and musical behavior.
-2. Define a minimal internal synth spec for the plugin: oscillator, envelope, filter, gain, moderate width.
-3. Expand the host-time adapter to handle loop wrap and host transport edge cases.
-4. Decide whether the first plugin prototype is a JUCE/C++ port or an intermediate host wrapper.
+1. Keep expanding tests around deterministic generation and musical behavior, especially infinite-mode structure and transport continuity.
+2. Define the first plugin target clearly: MIDI generator first, instrument first, or a staged path from MIDI to instrument.
+3. Expand the host-time adapter and runtime bridge to handle transport edges, loop wrap, and long-running infinite playback inside a host.
+4. Define a minimal internal synth spec only if the first plugin body includes audio generation.
+5. Decide whether the first prototype is a JUCE/C++ body or another wrapper that can host the current beat-based engine safely.
 
 The important rule: same settings, same progression, same seed, same events.
 

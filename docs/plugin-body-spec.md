@@ -4,14 +4,22 @@ This document describes how the current engine maps to a future instrument plugi
 
 It is not a JUCE implementation plan yet. It is the body contract.
 
+This is also intentionally a little broader than "audio instrument only". The current codebase is far enough along that a MIDI-generating plugin is a plausible first body too.
+
 ## Product Shape
 
-GhostTone is an instrument plugin.
+GhostTone can realistically become either:
+
+- a MIDI-generating plugin that feeds another instrument in the DAW
+- an instrument plugin with its own internal synth
+
+The current repository already contains a simple synth and render path, but the shortest route to a DAW body may still be a MIDI-first version.
 
 ```txt
-instrument track
--> GhostTone generates audio
--> DAW inserts handle EQ, compression, reverb, delay, saturation
+instrument or MIDI track
+-> GhostTone generates events
+-> optional internal synth renders audio
+-> DAW handles the rest of the chain
 ```
 
 GhostTone should stay focused on:
@@ -19,7 +27,7 @@ GhostTone should stay focused on:
 - harmony/progression
 - generative motion
 - microtonal offsets and drift
-- a simple internal synth voice
+- a simple internal synth voice when present
 - host-synced timing
 - deterministic patch state
 
@@ -43,6 +51,8 @@ The editor owns user interaction:
 
 - chord/progression editing
 - motion controls
+- global/local scale controls
+- memory and register controls
 - micro engine controls
 - voicing/arp controls
 - sound controls
@@ -72,6 +82,8 @@ The saved state includes:
 - sound choice
 - progression/chords
 - split/slot state
+- generator mode
+- infinite harmonic controls
 - micro engine controls
 - voicing controls
 - arp controls
@@ -101,7 +113,7 @@ The core remains beat-based. Host timing belongs to the timing adapter/processor
 
 ## Live Render Path
 
-Live playback path:
+Instrument-body playback path:
 
 ```txt
 patch state
@@ -112,6 +124,16 @@ patch state
 -> voice manager
 -> synth voice DSP
 -> audio output
+```
+
+MIDI-body playback path:
+
+```txt
+patch state
+-> ghosttone-core
+-> beat events
+-> host-time adapter
+-> note on/off emission in host time
 ```
 
 ## Offline Render Path
@@ -151,4 +173,3 @@ No separate musical engine should exist for offline export.
 - heavy UI redesign
 
 The first plugin body should prove the instrument path, not become a miniature DAW.
-

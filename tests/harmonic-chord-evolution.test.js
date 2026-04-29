@@ -142,6 +142,52 @@ test("applyVoiceLeading keeps all four chord tones voiced", () => {
   candidate.pitchClasses.forEach((pc) => assert.ok(voicedPitchClasses.has(pc)));
 });
 
+test("higher voicing continuity keeps infinite voicings closer to the previous chord", () => {
+  const current = currentChord();
+  const candidate = { root: 5, pitchClasses: [5, 9, 0, 4] };
+  const lowContinuity = applyVoiceLeading(candidate, current, {
+    settings: { harmonyLock: 0.5, voicingContinuity: 0 },
+  });
+  const highContinuity = applyVoiceLeading(candidate, current, {
+    settings: { harmonyLock: 0.5, voicingContinuity: 1 },
+  });
+
+  assert.ok(highContinuity.totalMovement <= lowContinuity.totalMovement);
+});
+
+test("higher voicing variation allows a wider pitch-center corridor", () => {
+  const current = currentChord();
+  const offCenter = {
+    notes: [
+      { pitchClass: 0, midi: 54, voiceId: 0 },
+      { pitchClass: 5, midi: 60, voiceId: 1 },
+      { pitchClass: 9, midi: 69, voiceId: 2 },
+      { pitchClass: 2, midi: 78, voiceId: 3 },
+    ],
+  };
+  const lowVariationPenalty = computePitchCenterPenalty(offCenter, current, {
+    settings: { harmonicMotion: 0.3, voicingVariation: 0, registerCenter: 60 },
+  });
+  const highVariationPenalty = computePitchCenterPenalty(offCenter, current, {
+    settings: { harmonicMotion: 0.3, voicingVariation: 1, registerCenter: 60 },
+  });
+
+  assert.ok(highVariationPenalty < lowVariationPenalty);
+});
+
+test("higher voicing variation permits broader voiced spacing", () => {
+  const current = currentChord();
+  const candidate = { root: 5, pitchClasses: [5, 9, 0, 4] };
+  const lowVariation = scoreCandidate(candidate, current, {
+    settings: { harmonicMotion: 0.3, harmonyLock: 0.5, voicingVariation: 0, voicingContinuity: 0.65 },
+  });
+  const highVariation = scoreCandidate(candidate, current, {
+    settings: { harmonicMotion: 0.3, harmonyLock: 0.5, voicingVariation: 1, voicingContinuity: 0.65 },
+  });
+
+  assert.ok(highVariation.score >= lowVariation.score);
+});
+
 test("computePitchCenterPenalty discourages upward register drift", () => {
   const current = currentChord();
   const nearby = {

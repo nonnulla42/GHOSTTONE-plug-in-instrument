@@ -54,6 +54,20 @@ function getMotionProfile(harmonicMotion) {
   };
 }
 
+function getVoicingVariationProfile(settings = {}) {
+  const variation = clamp(Number(settings.voicingVariation ?? 0.5), 0, 1);
+  const lerp = (a, b) => a + (b - a) * variation;
+  return {
+    variation,
+    centerHalfRange: lerp(6, 18),
+    centerRecoveryScale: lerp(1.2, 0.7),
+    laneCenterBias: lerp(1.15, 0.75),
+    centerPullScale: lerp(1.15, 0.72),
+    spacingSoftMax: lerp(12, 18),
+    spacingTightPenalty: lerp(1.15, 0.82),
+  };
+}
+
 function getSimilarityScaleProfile(settings = {}) {
   const hasLocalScale = settings.localScaleType && settings.localScaleType !== "chromatic";
   const hasDegreeFalloff = Number(settings.localDegreeFalloff) > 0;
@@ -540,6 +554,21 @@ function spacingPenalty(voicedNotes) {
   return penalty;
 }
 
+function voicingVariationSpacingPenalty(voicedNotes, settings = {}) {
+  const { spacingSoftMax, spacingTightPenalty } = getVoicingVariationProfile(settings);
+  const sorted = [...voicedNotes].sort((left, right) => left.midi - right.midi);
+  let penalty = 0;
+
+  for (let index = 1; index < sorted.length; index += 1) {
+    const gap = sorted[index].midi - sorted[index - 1].midi;
+    if (gap < 1) penalty += 8;
+    if (gap < 2) penalty += 3 * spacingTightPenalty;
+    if (gap > spacingSoftMax) penalty += (gap - spacingSoftMax) * 0.8;
+  }
+
+  return penalty;
+}
+
 export function getRegisterDriftWeight(currentMean, targetMean) {
   const diff = currentMean - targetMean;
   if (diff > 0) return 1 - Math.min(diff / 24, 0.6);
@@ -687,10 +716,12 @@ function shouldProtectInversionContinuity({ candidate, nearestTarget, previous, 
 
 function blendedVoiceTarget({ candidate, pitchClasses, previous, previousNotes, range, rolePc, settings }) {
   const voicingContinuity = Number(settings?.voicingContinuity ?? 0.65);
-  const continuityModifier = clamp(0.4 + (1 - voicingContinuity) * 1.6, 0.1, 2.0);
+  const variationProfile = getVoicingVariationProfile(settings);
+  const continuityFocus = clamp(voicingContinuity, 0, 1);
+  const continuityModifier = clamp(1.8 - continuityFocus * 1.4, 0.4, 1.8);
   const registerOffset = Math.abs(previous.midi - range.center);
-  const centerRecovery = clamp(registerOffset / 18, 0, 0.3);
-  const continuityWeight = 0.72 - centerRecovery;
+  const centerRecovery = clamp((registerOffset / 18) * variationProfile.centerRecoveryScale, 0, 0.3);
+  const continuityWeight = clamp(0.44 + continuityFocus * 0.38 - centerRecovery, 0.22, 0.82);
   const continuityTarget = previous.midi * continuityWeight + range.center * (1 - continuityWeight);
   const roleTarget = midiInRangeForVoice(rolePc, range, continuityTarget);
   const nearestTarget = nearestChordMidi(pitchClasses, range, previous.midi, previous.pitchClass);
@@ -763,9 +794,15 @@ export function applyVoiceLeading(candidate, current, options = {}) {
       const below = Math.max(0, range.min - note.midi);
       const above = Math.max(0, note.midi - range.max);
       const centerDistance = Math.abs(note.midi - range.center);
-      return sum + (below + above) * 8 + centerDistance * 0.08;
+      const laneCenterBias = getVoicingVariationProfile(options.settings).laneCenterBias;
+      return sum + (below + above) * 8 + centerDistance * 0.08 * laneCenterBias;
     }, 0);
-    const penalty = largeJumpPenalty + crossingPenalty(previousNotes, voicedNotes) + spacingPenalty(voicedNotes) + rangePenalty + harmonicIdentityPenalty;
+    const penalty =
+      largeJumpPenalty +
+      crossingPenalty(previousNotes, voicedNotes) +
+      voicingVariationSpacingPenalty(voicedNotes, options.settings) +
+      rangePenalty +
+      harmonicIdentityPenalty;
     const cost = totalMovement + penalty;
 
     if (!best || cost < best.cost) {
@@ -790,8 +827,8 @@ export function applyVoiceLeading(candidate, current, options = {}) {
 export function computePitchCenterPenalty(voicedChord, current, options = {}) {
   const settings = options.settings || {};
   const profile = getMotionProfile(settings.harmonicMotion ?? 0.3);
-  const variation = clamp(Number(settings.voicingVariation ?? 0.5), 0, 1);
-  const halfRange = 6 + (18 - 6) * variation;
+  const variationProfile = getVoicingVariationProfile(settings);
+  const halfRange = variationProfile.centerHalfRange;
   const registerCenter = Number(settings.registerCenter ?? 60);
   const ideal = options.idealCenter || { min: registerCenter - halfRange, max: registerCenter + halfRange };
   const notes = normalizeNotes(voicedChord);
@@ -799,7 +836,7 @@ export function computePitchCenterPenalty(voicedChord, current, options = {}) {
   const outsideLow = Math.max(0, ideal.min - center);
   const outsideHigh = Math.max(0, center - ideal.max);
   const outsidePenalty = (outsideLow + outsideHigh) * 2.4;
-  const targetPull = Math.abs(center - registerCenter) * 1.8;
+  const targetPull = Math.abs(center - registerCenter) * 1.8 * variationProfile.centerPullScale;
 
   return (outsidePenalty + targetPull) * profile.centerWeight;
 }

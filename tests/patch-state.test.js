@@ -67,7 +67,7 @@ test("applies a preset to the active compare slot", () => {
   const updated = applyPresetToPatchState(state, PRESETS[2]);
 
   assert.equal(updated.activeCompareSlot, "B");
-  assert.equal(updated.slots.B.name, "Dark Drift");
+  assert.equal(updated.slots.B.name, "Nocturne Current");
   assert.equal(updated.slots.B.mode, "pad");
   assert.equal(updated.slots.A.name, "Slot A");
 });
@@ -89,7 +89,7 @@ test("patch conversion feeds core, progression, and sound adapters", () => {
   assert.equal(patchToCoreSettings(patch).harmonicMotion, 0.3);
   assert.equal(patchToCoreSettings(patch).harmonicDistanceTarget, 1);
   assert.equal(patchToCoreSettings(patch).mode, "pad");
-  assert.equal(patchToSoundSettings(patch).space, 0.18);
+  assert.equal(patchToSoundSettings(patch).space, 0.22);
   assert.deepEqual(
     patchToProgression(patch).map((bar) => bar.slots[0].chord),
     ["Am9", "Fmaj7", "Cadd9", "Gsus4"],

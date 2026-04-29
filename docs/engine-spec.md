@@ -1,6 +1,8 @@
 # GhostTone Engine Spec
 
-This document describes the headless GhostTone engine contract.
+This document describes the current headless GhostTone engine contract.
+
+It is a checkpoint spec. It should match the code as it behaves now, not an older product idea.
 
 ## API
 
@@ -16,7 +18,8 @@ The engine is a pure musical generator. It does not read UI controls, schedule a
 
 Core musical controls:
 
-- `mode`: `pad`, `arp`, or `evolve`
+- `generatorMode`: `classic`, `roleBased`, or `infinite`
+- `mode`: `pad` or `arp`
 - `ghostAmount`: microtonal intensity, normalized `0..1`
 - `drift`: pitch movement amount, normalized `0..1`
 - `harmonyLock`: how strongly offsets stay close to harmonic context, normalized `0..1`
@@ -24,13 +27,30 @@ Core musical controls:
 - `stayMusical`: constrains more unstable offset choices
 - `ghostEnabled`: bypasses micro offsets when false
 - `voicingStyle`: chord layout strategy
-- `voicingVariation`: amount of voicing reshuffle, normalized `0..1`
+- `voicingVariation`: vertical voicing freedom, normalized `0..1`
 - `voicingContinuity`: strength of voice-leading continuity, normalized `0..1`
 - `arpDirection`: arp ordering strategy
 - `arpFeel`: rhythmic feel strategy
 - `arpDensity`: event count density, normalized `0..1`
-- `arpVariation`: arp reshuffle amount, normalized `0..1`
 - `arpContinuity`: strength of arp contour continuity, normalized `0..1`
+
+Additional harmonic controls used mainly by `infinite`:
+
+- `harmonicMotion`: balance between local harmonic direction and minimum displacement, normalized `0..1`
+- `harmonicDistanceTarget`: preferred root distance target in semitones or equivalent class distance
+- `harmonicDistanceFalloff`: tolerance around that target
+- `localScaleType`: `chromatic`, `major`, `minor`, `dorian`, `mixolydian`, `phrygian`, or `harmonicMinor`
+- `localTargetDegree`: local scale degree emphasis
+- `localDegreeFalloff`: on/off neighborhood around the target degree
+- `globalRoot`: pitch-class root for the outer scale fence, or `none`
+- `scaleName`: `none`, `major`, `minor`, `dorian`, `mixolydian`, `phrygian`, or `harmonicMinor`
+- `scaleInfluence`: how strongly the global scale shapes candidate harmony, normalized `0..1`
+- `memoryStrength`: how strongly infinite mode recalls and reuses recent harmonic material, normalized `0..1`
+- `registerCenter`: MIDI note used as harmonic center of gravity
+
+Legacy note:
+
+- older code paths may still accept `mode: "evolve"` internally for compatibility, but the active patch schema and UI normalize user-facing mode to `pad` or `arp`
 
 ### `progression`
 
@@ -49,6 +69,10 @@ Array of bars:
 
 When `split` is true, the first two slots divide the bar equally.
 
+In `classic` and `roleBased`, this progression is the direct harmonic source.
+
+In `infinite`, it acts more like a seed skeleton and launch point for later harmonic state generation.
+
 ### `seed`
 
 Positive integer seed. Same settings, same progression, and same seed must produce the same result.
@@ -61,10 +85,15 @@ Positive integer seed. Same settings, same progression, and same seed must produ
   settings,
   progression,
   loopBeats,
+  templateLoopBeats,
+  templateSections,
   sections,
-  events
+  events,
+  generatorMode
 }
 ```
+
+`templateLoopBeats` and `templateSections` are especially relevant when `generatorMode === "infinite"`, where the initial template can later be extended by the streaming runtime.
 
 ### Sections
 
@@ -83,6 +112,8 @@ A section is one chord slot placed on the beat grid:
   slotState
 }
 ```
+
+In infinite mode, later sections may be generated rather than copied directly from the written progression.
 
 ### Events
 
@@ -108,6 +139,42 @@ Each event is a note-like instruction for an adapter:
 }
 ```
 
+## Generator Modes
+
+### `classic`
+
+Uses the written progression directly.
+
+- parses chord slots from the progression
+- voices them section by section
+- emits note events with simpler behavior
+
+### `roleBased`
+
+Still uses the written progression directly, but each note behaves according to harmonic role.
+
+- notes are treated mainly as `anchor`, `color`, or `tension`
+- role affects motion type, drift, offset, duration, and velocity behavior
+
+### `infinite`
+
+Starts from a progression skeleton, then extends harmonic state forward.
+
+The current design intent is:
+
+1. generate a candidate pool of valid four-note chords
+2. let the global scale shape or filter that pool first
+3. let the local scale and target degree influence similarity scoring
+4. let `harmonicMotion` decide the balance between local direction and minimum displacement
+5. realize the winning harmony through voicing, register, and memory logic
+
+Important current rule of thumb:
+
+- global scale is the outer harmonic fence
+- local scale is directional force inside that fence
+- low `harmonicMotion` favors local-scale behavior more
+- high `harmonicMotion` favors minimum displacement more
+
 ## Field Semantics
 
 - `voiceId`: logical voice lane used for voice-leading, visual connection, and future synth allocation.
@@ -115,9 +182,12 @@ Each event is a note-like instruction for an adapter:
 - `cents`: starting pitch offset in cents relative to `midi`.
 - `driftEnd`: ending pitch offset in cents.
 - `driftAmount`: absolute distance between `cents` and `driftEnd`.
-- `role`: harmonic role, currently `stable`, `color`, `tension`, or `passing`.
-- `motionType`: the generation mode that produced the event.
+- `role`: event-facing harmonic role. Common values are `anchor`, `color`, `tension`, and sometimes `passing`.
+- `degree`: symbolic harmonic degree when available, such as `1`, `b3`, `5`, or `9`.
+- `motionType`: the generation mode that produced the event behavior.
 - `startBeat` and `durationBeats`: musical time in beats, not seconds or samples.
+
+Internal note labeling in infinite helpers may also use extra working roles such as `support`. Those are implementation details unless they reach emitted events.
 
 ## Invariants
 
@@ -125,7 +195,24 @@ Each event is a note-like instruction for an adapter:
 - Musical time is always beat-based.
 - The engine does not know DOM, canvas, Web Audio, MIDI files, or plugin host APIs.
 - Adapters are responsible for converting beats to seconds, samples, pixels, MIDI ticks, or host timeline positions.
-- The event schema is the contract between the engine and every future body: browser, tests, or plugin.
+- The event schema is the contract between the engine and every future body: browser, tests, export, or plugin.
+
+## Register And Voicing
+
+`registerCenter` is a real musical control, not just a display hint.
+
+It acts as a center of gravity:
+
+- discourages long-term drift upward or downward
+- keeps voice lanes in a usable range
+- still allows movement instead of hard-clamping every note
+
+Two voicing parameters matter most in the current engine:
+
+- `voicingContinuity`: how strongly a voice prefers to remain near its previous position
+- `voicingVariation`: how much vertical freedom the realized voicing gets
+
+These shape the realized voicing more than the harmonic candidate pool itself.
 
 ## Host-Time Adapter
 
@@ -151,7 +238,7 @@ It returns events with:
 - `durationSamples`: event duration in samples
 - `blockStartBeat`: source host beat for the block
 
-This mirrors the future plugin responsibility: read host transport/tempo, keep the core in beats, and schedule synth voices in sample time.
+This mirrors the future plugin responsibility: read host transport and tempo, keep the core in beats, and schedule voices in sample time.
 
 Scheduling uses half-open beat windows: `[startBeat, endBeat)`.
 
@@ -174,7 +261,7 @@ It simulates a plugin-style scheduler:
 4. schedule only the events in the next short lookahead window
 5. create Web Audio voices for those scheduled events
 
-The browser engine is still only a development body, but its timing path now mirrors the future plugin path:
+The browser engine is still a development body, but its timing path mirrors the future plugin path:
 
 ```txt
 core events in beats
@@ -221,37 +308,41 @@ A synth voice applies:
 - moderate pan from `voiceId`
 - simple waveform and lowpass filter settings
 
-This keeps `web-audio-engine.js` focused on scheduling and coordination. The browser implementation is still temporary, but the voice contract is now explicit enough to port to native DSP later.
+This keeps `web-audio-engine.js` focused on scheduling and coordination. The browser implementation is still temporary, but the voice contract is explicit enough to port to native DSP later.
 
 ## Web Wrapper
 
-The browser app is now a development wrapper around the engine pipeline.
+The browser app is a development wrapper around the engine pipeline.
 
 Its responsibilities are limited to:
 
-- reading UI controls into settings/progression/seed
+- reading UI controls into settings, progression, and seed
 - applying presets and compare patches
 - calling `ghosttone-core`
 - passing events to visual, MIDI, and audio adapters
 
 Preset and compare behavior lives outside `app.js`:
 
-- `src/web/presets.js`: four minimal identity presets
+- `src/web/presets.js`: practical listening presets for the current engine
 - `src/web/patch-adapter.js`: capture/apply browser patches
 - `src/web/compare-manager.js`: deterministic A/B slot state
 
-The current minimal presets are:
+Current presets include:
 
 - Dreamy Pad
 - Warm Bed
-- Dark Drift
+- Nocturne Current
 - Broken Arp
+- Local Weave
+- Open Canopy
+- Tight Orbit
+- Wide Orbit
 
-These presets are not a sound-library layer. They are compact test fixtures for the musical engine and early product identity.
+These presets are meant as listening anchors and regression fixtures, not a finished content library.
 
 ## Serializable State
 
-`src/state/patch-state.js` defines the plugin-facing patch state and is now the explicit source of truth for the browser wrapper.
+`src/state/patch-state.js` defines the patch-state shape and is the source of truth for the browser wrapper.
 
 It owns:
 
@@ -260,10 +351,10 @@ It owns:
 - compare slots
 - active compare slot
 - preset-to-patch conversion
-- serialize/deserialize
+- serialize and deserialize
 - state normalization
 
-This state is the bridge from the browser test body to a future plugin body. A DAW project should eventually save this patch state, then restore it and regenerate the same musical events.
+This state is the bridge from the browser body to a future plugin body. A DAW project should eventually save this patch state, then restore it and regenerate the same musical events.
 
 The browser app follows this state path:
 

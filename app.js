@@ -33,7 +33,12 @@ const state = {
   pattern: null,
   currentSectionIndex: 0,
   raf: null,
+  pendingUiUpdate: null,
+  pendingUiTimer: null,
 };
+
+const LIVE_PATTERN_UPDATE_MS = 120;
+const LIVE_SOUND_UPDATE_MS = 45;
 
 const els = getElements();
 const audio = new WebAudioAdapter();
@@ -58,6 +63,53 @@ function applyActivePatchToUi() {
   applyPatch(els, patch);
   refreshProgressionUi(patch.barStates);
   updateCompareUi(document, state.patchState.activeCompareSlot);
+}
+
+function clearPendingUiUpdate() {
+  if (state.pendingUiTimer) {
+    clearTimeout(state.pendingUiTimer);
+    state.pendingUiTimer = null;
+  }
+}
+
+function commitUiPatchUpdate({ restartAudio = true, soundOnly = false } = {}) {
+  syncActivePatchFromUi();
+  if (soundOnly) {
+    refreshSoundOnly({ restartAudio });
+  } else {
+    rebuildPattern({ restartAudio });
+  }
+}
+
+function flushPendingUiUpdate() {
+  if (!state.pendingUiUpdate) return;
+  const pending = state.pendingUiUpdate;
+  state.pendingUiUpdate = null;
+  clearPendingUiUpdate();
+  commitUiPatchUpdate(pending);
+}
+
+function scheduleUiPatchUpdate({ restartAudio = true, soundOnly = false, immediate = false } = {}) {
+  if (immediate || !audio.isPlaying) {
+    state.pendingUiUpdate = null;
+    clearPendingUiUpdate();
+    commitUiPatchUpdate({ restartAudio, soundOnly });
+    return;
+  }
+
+  const delay = soundOnly ? LIVE_SOUND_UPDATE_MS : LIVE_PATTERN_UPDATE_MS;
+  const previous = state.pendingUiUpdate;
+  state.pendingUiUpdate = previous
+    ? {
+        restartAudio: previous.restartAudio || restartAudio,
+        soundOnly: previous.soundOnly && soundOnly,
+      }
+    : { restartAudio, soundOnly };
+
+  clearPendingUiUpdate();
+  state.pendingUiTimer = setTimeout(() => {
+    flushPendingUiUpdate();
+  }, delay);
 }
 
 function rebuildPattern({ restartAudio = true } = {}) {
@@ -102,6 +154,8 @@ function refreshSoundOnly({ restartAudio = true } = {}) {
 }
 
 function loadCurrentPatch({ restartAudio = true } = {}) {
+  state.pendingUiUpdate = null;
+  clearPendingUiUpdate();
   applyActivePatchToUi();
   rebuildPattern({ restartAudio });
 }
@@ -127,24 +181,21 @@ function switchCompareSlot(slot) {
 }
 
 function updateActivePatch(mutator, { restartAudio = true, syncUi = true } = {}) {
+  state.pendingUiUpdate = null;
+  clearPendingUiUpdate();
   const nextPatch = mutator(activePatch());
   state.patchState = setActivePatch(state.patchState, nextPatch);
   if (syncUi) applyActivePatchToUi();
   rebuildPattern({ restartAudio });
 }
 
-function updateActivePatchFromUi({ restartAudio = true, soundOnly = false } = {}) {
-  syncActivePatchFromUi();
-  if (soundOnly) {
-    refreshSoundOnly({ restartAudio });
-  } else {
-    rebuildPattern({ restartAudio });
-  }
+function updateActivePatchFromUi({ restartAudio = true, soundOnly = false, immediate = false } = {}) {
+  scheduleUiPatchUpdate({ restartAudio, soundOnly, immediate });
 }
 
 async function togglePlay() {
   if (!audio.isPlaying) {
-    updateActivePatchFromUi({ restartAudio: false });
+    updateActivePatchFromUi({ restartAudio: false, immediate: true });
     const patch = activePatch();
     await audio.start(state.pattern, patchToCoreSettings(patch), patchToSoundSettings(patch), patch.bpm);
     els.playButton.textContent = "Stop";
@@ -152,6 +203,7 @@ async function togglePlay() {
     return;
   }
 
+  flushPendingUiUpdate();
   audio.stop();
   els.playButton.textContent = "Play";
   visualizer.updatePlayhead(null);
@@ -225,6 +277,7 @@ function regenerateSeed() {
 }
 
 function exportPatchJson() {
+  flushPendingUiUpdate();
   syncActivePatchFromUi();
   const blob = new Blob([serializePatchState(state.patchState)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -282,19 +335,22 @@ function bindEvents() {
   });
 
   els.exportButton.addEventListener("click", () => {
-    updateActivePatchFromUi({ restartAudio: false });
+    flushPendingUiUpdate();
+    updateActivePatchFromUi({ restartAudio: false, immediate: true });
     const patch = activePatch();
     exportMidi(state.pattern, patch.bpm, patch.sound);
   });
 
   els.exportInfiniteButton.addEventListener("click", () => {
-    updateActivePatchFromUi({ restartAudio: false });
+    flushPendingUiUpdate();
+    updateActivePatchFromUi({ restartAudio: false, immediate: true });
     const patch = activePatch();
     exportInfiniteMidi(state.pattern, patch.bpm, patch.sound);
   });
 
   els.exportWavButton.addEventListener("click", () => {
-    updateActivePatchFromUi({ restartAudio: false });
+    flushPendingUiUpdate();
+    updateActivePatchFromUi({ restartAudio: false, immediate: true });
     const patch = activePatch();
     exportWav(patch, {
       sampleRate: 44100,
@@ -307,7 +363,7 @@ function bindEvents() {
   });
 
   els.bpm.addEventListener("input", () => updateActivePatchFromUi({ soundOnly: true }));
-  els.bpm.addEventListener("change", () => updateActivePatchFromUi({ soundOnly: true }));
+  els.bpm.addEventListener("change", () => scheduleUiPatchUpdate({ soundOnly: true, immediate: true }));
 
   els.generatorButtons.forEach((button) => {
     button.addEventListener("click", () => setGeneratorMode(button.dataset.generatorMode));
@@ -356,10 +412,12 @@ function bindEvents() {
     ...els.chordInputs,
   ].forEach((control) => {
     control.addEventListener("input", () => updateActivePatchFromUi());
+    control.addEventListener("change", () => scheduleUiPatchUpdate({ immediate: true }));
   });
 
   [els.waveform, els.cutoff, els.attack, els.release, els.space, els.reverbMix, els.delayMix].forEach((control) => {
     control.addEventListener("input", () => updateActivePatchFromUi({ soundOnly: true }));
+    control.addEventListener("change", () => scheduleUiPatchUpdate({ soundOnly: true, immediate: true }));
   });
 
   window.addEventListener("resize", () => {
