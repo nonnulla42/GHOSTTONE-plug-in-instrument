@@ -1,6 +1,6 @@
 # GhostTone
 
-GhostTone is a generative harmonic instrument in active development.
+GhostTone/GhostTown is a generative harmonic instrument in active development.
 
 Right now it exists as:
 
