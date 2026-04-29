@@ -6,7 +6,7 @@ import {
   resolveDurationBeats,
 } from "./harmonic-roles.js";
 import { buildInfiniteSections } from "./harmonic-infinite.js";
-import { buildInfinitePhraseEvents } from "./infinite-phrase.js";
+import { appendInfinitePhraseEvents, buildInfinitePhraseEvents, createInfinitePhraseEventRuntime } from "./infinite-phrase.js";
 
 const noteMap = {
   C: 0,
@@ -841,6 +841,84 @@ function generateRoleBasedEvents(events, sections, settings, normalizedSeed) {
       emitEvolveEvents(events, context, previousVoiceEvents);
     }
   });
+}
+
+function createInfiniteRoleEventRuntime(normalizedSettings, normalizedSeed) {
+  return {
+    settings: normalizedSettings,
+    normalizedSeed,
+    rand: makeRandom(normalizedSeed),
+    previousVoiceEvents: new Map(),
+    previousSection: null,
+  };
+}
+
+function appendInfiniteRoleEvents(runtime, sections = []) {
+  const events = [];
+
+  sections.forEach((section, localIndex) => {
+    const sectionIndex = section.sectionIndex ?? localIndex;
+    const notes = section.notes.map((note) => ({
+      ...note,
+      harmonicRole: note.harmonicRole || assignHarmonicRole(note),
+    }));
+    const context = {
+      section,
+      sectionIndex,
+      notes,
+      normalizedSeed: runtime.normalizedSeed,
+      rand: runtime.rand,
+      settings: runtime.settings,
+      prevChord: runtime.previousSection || section,
+      nextChord: section,
+      previousSection: runtime.previousSection,
+    };
+
+    if (runtime.settings.mode === "pad") {
+      emitPadEvents(events, context);
+    } else if (runtime.settings.mode === "arp") {
+      emitArpEvents(events, context, runtime.previousVoiceEvents);
+    } else {
+      emitEvolveEvents(events, context, runtime.previousVoiceEvents);
+    }
+
+    runtime.previousSection = section;
+  });
+
+  return events;
+}
+
+export function createInfinitePatternEventRuntime(settings = {}, seed = 1) {
+  const normalizedSettings = normalizeSettings(settings);
+  const normalizedSeed = seedToInt(seed);
+
+  if (normalizedSettings.generatorMode === "infinitePhrase") {
+    return {
+      kind: "infinitePhrase",
+      runtime: createInfinitePhraseEventRuntime(normalizedSettings, normalizedSeed, makeRandom),
+    };
+  }
+
+  if (normalizedSettings.generatorMode === "infinite" || normalizedSettings.generatorMode === "roleBased") {
+    return {
+      kind: "infiniteRole",
+      runtime: createInfiniteRoleEventRuntime(normalizedSettings, normalizedSeed),
+    };
+  }
+
+  throw new TypeError("createInfinitePatternEventRuntime requires an infinite-compatible generator mode");
+}
+
+export function appendInfinitePatternEvents(eventRuntime, sections = []) {
+  if (eventRuntime.kind === "infinitePhrase") {
+    return appendInfinitePhraseEvents(eventRuntime.runtime, sections);
+  }
+
+  if (eventRuntime.kind === "infiniteRole") {
+    return appendInfiniteRoleEvents(eventRuntime.runtime, sections);
+  }
+
+  throw new TypeError("Unknown infinite event runtime kind");
 }
 
 export function buildPatternEventsForSections(sections, settings = {}, seed = 1) {

@@ -153,6 +153,10 @@ function refreshSoundOnly({ restartAudio = true } = {}) {
   }
 }
 
+function patternForExport() {
+  return audio.isPlaying ? audio.getFullPattern() : state.pattern;
+}
+
 function loadCurrentPatch({ restartAudio = true } = {}) {
   state.pendingUiUpdate = null;
   clearPendingUiUpdate();
@@ -338,14 +342,14 @@ function bindEvents() {
     flushPendingUiUpdate();
     updateActivePatchFromUi({ restartAudio: false, immediate: true });
     const patch = activePatch();
-    exportMidi(state.pattern, patch.bpm, patch.sound);
+    exportMidi(patternForExport(), patch.bpm, patch.sound);
   });
 
   els.exportInfiniteButton.addEventListener("click", () => {
     flushPendingUiUpdate();
     updateActivePatchFromUi({ restartAudio: false, immediate: true });
     const patch = activePatch();
-    exportInfiniteMidi(state.pattern, patch.bpm, patch.sound);
+    exportInfiniteMidi(patternForExport(), patch.bpm, patch.sound);
   });
 
   els.exportWavButton.addEventListener("click", () => {

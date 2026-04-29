@@ -511,91 +511,136 @@ function pickFromMemory(progression, random, options = {}) {
   return { state, index: progression.indexOf(state) };
 }
 
-export function buildInfiniteSectionSequence(seedSections, settings, seed, totalSectionCount, makeRandom) {
+export function createInfiniteSectionRuntime(seedSections, settings, seed, makeRandom) {
   if (!Array.isArray(seedSections) || seedSections.length === 0) return [];
 
   const random = makeRandom(seed + 9173);
-  const generated = [];
-  const history = [];
   const templateLoopBeats = seedSections.reduce((max, section) => Math.max(max, section.startBeat + section.durationBeats), 0);
-  let currentState = createHarmonicStateFromSection(seedSections[0]);
-
-  generated.push(stateToSection(currentState, seedSections[0], 0, templateLoopBeats, seedSections.length));
-  history.push(currentState);
+  const currentState = createHarmonicStateFromSection(seedSections[0]);
 
   // progression memory: sliding window of up to 16 states, with recency-biased recall
   const MAX_MEMORY = 16;
-  const progression = [currentState];
-  let currentMemIndex = 0;
   const memoryStrength = Number(settings.memoryStrength) || 0;
   const useMemoryProb = 0.18 + memoryStrength * 0.56;
-  let consecutiveRepeatCount = 0;
 
-  for (let index = 1; index < totalSectionCount; index += 1) {
-    const skeleton = seedSections[index % seedSections.length];
-    const targetRootPc = index < seedSections.length ? skeleton.rootPc : null;
-    const currentSignature = stateSignature(currentState);
+  return {
+    seedSections,
+    settings,
+    random,
+    templateLoopBeats,
+    templateSectionCount: seedSections.length,
+    currentState,
+    history: [currentState],
+    progression: [currentState],
+    currentMemIndex: 0,
+    consecutiveRepeatCount: 0,
+    nextSectionIndex: 0,
+    maxMemory: MAX_MEMORY,
+    memoryStrength,
+    useMemoryProb,
+  };
+}
+
+export function appendInfiniteSections(runtime, count) {
+  const appended = [];
+  const targetCount = Math.max(0, Math.trunc(count || 0));
+
+  for (let appendedCount = 0; appendedCount < targetCount; appendedCount += 1) {
+    const index = runtime.nextSectionIndex;
+    const skeleton = runtime.seedSections[index % runtime.templateSectionCount];
+
+    if (index === 0) {
+      appended.push(stateToSection(runtime.currentState, skeleton, index, runtime.templateLoopBeats, runtime.templateSectionCount));
+      runtime.nextSectionIndex += 1;
+      continue;
+    }
+
+    const targetRootPc = index < runtime.templateSectionCount ? skeleton.rootPc : null;
+    const currentSignature = stateSignature(runtime.currentState);
 
     let nextState;
-    const r = random();
+    const r = runtime.random();
 
-    if (progression.length < 4 || r >= useMemoryProb) {
-      // CONTINUE FORWARD: generate a genuinely new chord
-      nextState = evolveHarmonicState(currentState, { random, settings, targetRootPc, history });
-      progression.push(nextState);
-      if (progression.length > MAX_MEMORY) progression.shift();
-      currentMemIndex = progression.length - 1;
+    if (runtime.progression.length < 4 || r >= runtime.useMemoryProb) {
+      nextState = evolveHarmonicState(runtime.currentState, {
+        random: runtime.random,
+        settings: runtime.settings,
+        targetRootPc,
+        history: runtime.history,
+      });
+      runtime.progression.push(nextState);
+      if (runtime.progression.length > runtime.maxMemory) runtime.progression.shift();
+      runtime.currentMemIndex = runtime.progression.length - 1;
     } else {
-      const memR = random();
-      const repeatCurrentProb = memoryStrength >= 0.4 ? (memoryStrength - 0.4) * 0.2 : 0;
+      const memR = runtime.random();
+      const repeatCurrentProb = runtime.memoryStrength >= 0.4 ? (runtime.memoryStrength - 0.4) * 0.2 : 0;
       const mutationProb = 0.24;
       const recallProb = Math.max(0, 1 - mutationProb - repeatCurrentProb);
 
       if (memR < recallProb) {
-        // LOOP / RETURN: recall remembered material, but avoid the current chord
-        const picked = pickFromMemory(progression, random, {
-          excludeIndexes: [currentMemIndex],
+        const picked = pickFromMemory(runtime.progression, runtime.random, {
+          excludeIndexes: [runtime.currentMemIndex],
           excludeSignature: currentSignature,
         });
         if (picked) {
-          nextState = alignRememberedState(picked.state, currentState, settings);
-          currentMemIndex = picked.index;
+          nextState = alignRememberedState(picked.state, runtime.currentState, runtime.settings);
+          runtime.currentMemIndex = picked.index;
         } else {
-          nextState = evolveHarmonicState(currentState, { random, settings, targetRootPc, history });
-          progression.push(nextState);
-          if (progression.length > MAX_MEMORY) progression.shift();
-          currentMemIndex = progression.length - 1;
+          nextState = evolveHarmonicState(runtime.currentState, {
+            random: runtime.random,
+            settings: runtime.settings,
+            targetRootPc,
+            history: runtime.history,
+          });
+          runtime.progression.push(nextState);
+          if (runtime.progression.length > runtime.maxMemory) runtime.progression.shift();
+          runtime.currentMemIndex = runtime.progression.length - 1;
         }
       } else if (memR < recallProb + mutationProb) {
-        // MUTATION: evolve from remembered material without anchoring to the current chord
-        const picked = pickFromMemory(progression, random, {
-          excludeIndexes: [currentMemIndex],
+        const picked = pickFromMemory(runtime.progression, runtime.random, {
+          excludeIndexes: [runtime.currentMemIndex],
           excludeSignature: currentSignature,
         });
-        const base = picked?.state ? alignRememberedState(picked.state, currentState, settings) : currentState;
-        nextState = evolveHarmonicState(base, { random, settings, targetRootPc, history });
-        progression.push(nextState);
-        if (progression.length > MAX_MEMORY) progression.shift();
-        currentMemIndex = progression.length - 1;
-      } else if (consecutiveRepeatCount === 0) {
-        // HOLD: only allow explicit back-to-back repetition when memory is intentionally strong
-        nextState = progression[currentMemIndex];
+        const base = picked?.state ? alignRememberedState(picked.state, runtime.currentState, runtime.settings) : runtime.currentState;
+        nextState = evolveHarmonicState(base, {
+          random: runtime.random,
+          settings: runtime.settings,
+          targetRootPc,
+          history: runtime.history,
+        });
+        runtime.progression.push(nextState);
+        if (runtime.progression.length > runtime.maxMemory) runtime.progression.shift();
+        runtime.currentMemIndex = runtime.progression.length - 1;
+      } else if (runtime.consecutiveRepeatCount === 0) {
+        nextState = runtime.progression[runtime.currentMemIndex];
       } else {
-        nextState = evolveHarmonicState(currentState, { random, settings, targetRootPc, history });
-        progression.push(nextState);
-        if (progression.length > MAX_MEMORY) progression.shift();
-        currentMemIndex = progression.length - 1;
+        nextState = evolveHarmonicState(runtime.currentState, {
+          random: runtime.random,
+          settings: runtime.settings,
+          targetRootPc,
+          history: runtime.history,
+        });
+        runtime.progression.push(nextState);
+        if (runtime.progression.length > runtime.maxMemory) runtime.progression.shift();
+        runtime.currentMemIndex = runtime.progression.length - 1;
       }
     }
 
-    consecutiveRepeatCount = stateSignature(nextState) === currentSignature ? consecutiveRepeatCount + 1 : 0;
-    currentState = nextState;
-    generated.push(stateToSection(currentState, skeleton, index, templateLoopBeats, seedSections.length));
-    history.push(currentState);
-    if (history.length > 8) history.shift();
+    runtime.consecutiveRepeatCount = stateSignature(nextState) === currentSignature ? runtime.consecutiveRepeatCount + 1 : 0;
+    runtime.currentState = nextState;
+    appended.push(stateToSection(runtime.currentState, skeleton, index, runtime.templateLoopBeats, runtime.templateSectionCount));
+    runtime.history.push(runtime.currentState);
+    if (runtime.history.length > 8) runtime.history.shift();
+    runtime.nextSectionIndex += 1;
   }
 
-  return generated;
+  return appended;
+}
+
+export function buildInfiniteSectionSequence(seedSections, settings, seed, totalSectionCount, makeRandom) {
+  const runtime = createInfiniteSectionRuntime(seedSections, settings, seed, makeRandom);
+  if (!runtime || !runtime.seedSections) return [];
+  return appendInfiniteSections(runtime, totalSectionCount);
 }
 
 function stateToSection(state, skeleton, index, templateLoopBeats = 0, templateSectionCount = 1) {

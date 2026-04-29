@@ -69,6 +69,15 @@ These parameters decide what harmony the engine wants, especially in `infinite` 
 
 This is the first fork in behavior.
 
+Important current note for `infinitePhrase`:
+
+- `arpDensity` and `arpFeel` do affect the phrase generator directly
+- `mode` (`pad` / `arp`) does not
+- `arpDirection` does not
+- `arpContinuity` does not
+- per-slot `arpSeed` does not
+- `voicingStyle` is only indirect there, because it influences the harmonic template voicing rather than the phrase engine itself
+
 ### Written `chords`
 
 In `classic` and `roleBased`, the chord grid is the actual harmony.
@@ -168,6 +177,8 @@ Broad voicing flavor:
 
 This is a top-level disposition choice, not a full harmonic policy.
 
+In `infinitePhrase`, this parameter is only indirect: it affects the voiced harmonic sections the phrase sits on, but not the phrase-event logic itself.
+
 ### `voicingContinuity`
 
 How strongly each voice wants to stay near its previous position.
@@ -213,6 +224,10 @@ This matters a lot in `infinite` and `infinitePhrase`, especially over long play
 
 This does not choose harmony by itself, but it strongly changes how that harmony is experienced.
 
+Current exception:
+
+- in `infinitePhrase`, `mode` is effectively ignored by the phrase generator
+
 ### `voicingSeed` and `arpSeed`
 
 Per-slot local variation levers in the progression template.
@@ -221,6 +236,10 @@ Per-slot local variation levers in the progression template.
 - `arpSeed` nudges local arp treatment
 
 These are useful for local contrast without changing the whole patch.
+
+Current exception:
+
+- in `infinitePhrase`, `arpSeed` does not currently affect phrase generation
 
 ## Event And Motion Layer
 

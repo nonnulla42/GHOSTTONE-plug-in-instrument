@@ -121,6 +121,18 @@ test("getCurrentBeat wraps classic playback but stays absolute for infinite play
   assert.equal(engine.getCurrentBeat(120, { generatorMode: "infinitePhrase", loopBeats: 32 }), 20);
 });
 
+test("getFullPattern prefers the full infinite runtime pattern over the live window", () => {
+  const engine = new WebAudioEngine();
+  const fullPattern = { loopBeats: 64, events: [{ id: "full" }] };
+  const windowPattern = { loopBeats: 32, events: [{ id: "window" }] };
+
+  engine.currentPattern = { loopBeats: 16, events: [{ id: "current" }] };
+  engine.streamRuntime = { pattern: fullPattern, windowPattern };
+
+  assert.equal(engine.getPlaybackPattern(engine.currentPattern), windowPattern);
+  assert.equal(engine.getFullPattern(), fullPattern);
+});
+
 function event(id, startBeat) {
   return {
     id,

@@ -2,6 +2,7 @@ import { clamp } from "./ui-adapter.js";
 
 export const VIEW_BEATS_BEFORE = 4;
 export const VIEW_BEATS_AFTER = 4;
+export const VIEWPORT_RERENDER_STEP_BEATS = 0.0625;
 
 export function getVisibleBeatRange(currentBeat = 0, before = VIEW_BEATS_BEFORE, after = VIEW_BEATS_AFTER) {
   const beat = Number.isFinite(currentBeat) ? currentBeat : 0;
@@ -27,6 +28,9 @@ export class GridVisualizer {
     this.currentBeat = 0;
     this.visualBeat = 0;
     this.lastRenderedBeat = null;
+    this.lastViewportAnchor = null;
+    this.renderedRange = null;
+    this.sectionBands = new Map();
   }
 
   render(pattern, currentSectionIndex = this.currentSectionIndex, currentBeat = this.currentBeat) {
@@ -48,6 +52,7 @@ export class GridVisualizer {
     const midiSource = visibleEvents.length ? visibleEvents : pattern.events;
 
     grid.innerHTML = "";
+    this.sectionBands.clear();
 
     const minMidi = midiSource.length ? Math.max(36, Math.min(...midiSource.map((event) => event.midi)) - 3) : 45;
     const maxMidi = midiSource.length ? Math.min(96, Math.max(...midiSource.map((event) => event.midi)) + 3) : 84;
@@ -92,6 +97,7 @@ export class GridVisualizer {
       band.style.width = `${Math.max(0.6, right - left)}%`;
       band.textContent = section.label;
       sectionLayer.appendChild(band);
+      this.sectionBands.set(sectionIndex, band);
     });
 
     const eventPosition = (event, useEnd = false) => ({
@@ -153,15 +159,20 @@ export class GridVisualizer {
     });
 
     grid.appendChild(playhead);
-    playhead.hidden = false;
-    playhead.style.left = `${beatToViewportX(currentBeat, range)}%`;
+    this.updatePlayheadElement(playhead, currentBeat, range);
     this.lastRenderedBeat = currentBeat;
+    this.lastViewportAnchor = quantizeViewportAnchor(range.startBeat);
+    this.renderedRange = range;
   }
 
   updateActiveSection(sectionIndex) {
     if (sectionIndex === this.currentSectionIndex) return;
+    const previousSectionIndex = this.currentSectionIndex;
     this.currentSectionIndex = sectionIndex;
-    if (this.pattern) this.renderViewport(this.visualBeat);
+    const previousBand = this.sectionBands.get(previousSectionIndex);
+    const nextBand = this.sectionBands.get(sectionIndex);
+    if (previousBand) previousBand.classList.remove("active");
+    if (nextBand) nextBand.classList.add("active");
   }
 
   updatePlayhead(beat) {
@@ -178,13 +189,29 @@ export class GridVisualizer {
     this.currentBeat = actualBeat;
     this.visualBeat = previousVisualBeat + (actualBeat - previousVisualBeat) * 0.24;
 
-    if (this.lastRenderedBeat === null || Math.abs(this.visualBeat - this.lastRenderedBeat) >= 0.025) {
+    if (this.shouldRerenderViewport()) {
       this.renderViewport(this.visualBeat);
       return;
     }
 
-    const range = getVisibleBeatRange(this.visualBeat);
-    existingPlayhead.hidden = false;
-    existingPlayhead.style.left = `${beatToViewportX(this.visualBeat, range)}%`;
+    const range = this.renderedRange || getVisibleBeatRange(this.visualBeat);
+    this.updatePlayheadElement(existingPlayhead, this.visualBeat, range);
   }
+
+  shouldRerenderViewport() {
+    if (this.lastRenderedBeat === null) return true;
+    const range = getVisibleBeatRange(this.visualBeat);
+    const nextAnchor = quantizeViewportAnchor(range.startBeat);
+    return nextAnchor !== this.lastViewportAnchor;
+  }
+
+  updatePlayheadElement(playhead, beat, range) {
+    if (!playhead) return;
+    playhead.hidden = false;
+    playhead.style.left = `${beatToViewportX(beat, range)}%`;
+  }
+}
+
+function quantizeViewportAnchor(startBeat) {
+  return Math.round((Number.isFinite(startBeat) ? startBeat : 0) / VIEWPORT_RERENDER_STEP_BEATS);
 }

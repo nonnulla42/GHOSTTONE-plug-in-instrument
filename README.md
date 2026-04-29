@@ -11,6 +11,17 @@ Right now it exists as:
 
 This README is a checkpoint, not a final spec. It reflects the project as it works now.
 
+## Development
+
+The browser app now targets a Vite-based workflow.
+
+- `npm run dev` starts the local app for iteration
+- `npm run build` creates a production web build
+- `npm run preview` serves the built app locally
+- `npm test` runs the test suite
+
+This is mainly a workflow and packaging improvement. It does not change the musical engine by itself, but it gives the web version a more solid base for export/download testing and later UI/runtime cleanup.
+
 ## What It Is
 
 GhostTone is built around a simple idea:
@@ -74,6 +85,13 @@ Uses the same infinite harmonic engine as `infinite`, but realizes it as a singl
 - mixes current chord tones with global-scale and local-scale degrees
 - keeps note mobility equal across the line
 - uses `registerCenter` as soft long-term gravity so the phrase does not drift away
+
+Important current note:
+
+- in `infinitePhrase`, `arpDensity` and `arpFeel` matter
+- but `mode` (`pad` / `arp`), `arpDirection`, and `arpContinuity` do not currently change the phrase generator
+- per-slot `arpSeed` also does not currently affect `infinitePhrase`
+- `voicingStyle` is only indirect here: it shapes the voiced harmonic template, not the phrase logic itself
 
 ## Harmonic Model In Infinite
 

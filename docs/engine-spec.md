@@ -184,6 +184,13 @@ Uses the same infinite harmonic sections as `infinite`, but emits phrase events 
 - note mobility is uniform across the phrase
 - `registerCenter` remains the soft long-term gravity for the line
 
+Current implementation note:
+
+- `arpDensity` and `arpFeel` affect phrase timing directly
+- `mode`, `arpDirection`, and `arpContinuity` do not currently affect `infinitePhrase`
+- per-slot `arpSeed` does not currently affect `infinitePhrase`
+- `voicingStyle` only affects the harmonic section voicing underneath, not the phrase-event logic directly
+
 ## Field Semantics
 
 - `voiceId`: logical voice lane used for voice-leading, visual connection, and future synth allocation.

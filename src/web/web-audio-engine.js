@@ -164,7 +164,7 @@ export class WebAudioEngine {
       ? createInfiniteStreamRuntime(pattern, coreSettings, pattern.seed || 1)
       : null;
     if (this.streamRuntime) {
-      this.onPatternExtended?.(pattern);
+      this.onPatternExtended?.(this.streamRuntime.windowPattern);
     }
     this.voiceManager.clear();
     this.tick();
@@ -261,7 +261,7 @@ export class WebAudioEngine {
   }
 
   getPlaybackPattern(pattern) {
-    return this.streamRuntime?.pattern || pattern;
+    return this.streamRuntime?.windowPattern || pattern;
   }
 
   extendInfinitePlaybackIfNeeded(currentBeat) {
@@ -270,8 +270,12 @@ export class WebAudioEngine {
     const previousLoopBeats = this.streamRuntime.pattern.loopBeats;
     ensureInfiniteBeats(this.streamRuntime, currentBeat);
     if (this.streamRuntime.pattern.loopBeats !== previousLoopBeats) {
-      this.onPatternExtended?.(this.streamRuntime.pattern);
+      this.onPatternExtended?.(this.streamRuntime.windowPattern);
     }
+  }
+
+  getFullPattern() {
+    return this.streamRuntime?.pattern || this.currentPattern;
   }
 
   getInfiniteDebugState() {
@@ -280,6 +284,8 @@ export class WebAudioEngine {
     return {
       generatedBars: this.streamRuntime.generatedBars,
       generatedEvents: this.streamRuntime.generatedEvents,
+      windowedEvents: this.streamRuntime.windowPattern?.events.length ?? 0,
+      windowedSections: this.streamRuntime.windowPattern?.sections.length ?? 0,
       nextBarToGenerate: this.streamRuntime.nextBarToGenerate,
       availableBeatRange: [0, this.streamRuntime.pattern.loopBeats],
       lastScheduledBeat: this.lastScheduledBeat,

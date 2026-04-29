@@ -378,17 +378,28 @@ function buildPhraseEvent(note, section, sectionIndex, startBeat, durationBeats,
   };
 }
 
-export function buildInfinitePhraseEvents(sections, settings = {}, seed = 1, makeRandom) {
-  const random = makeRandom(seed + 48031);
-  const events = [];
-  const phraseState = {
-    previousMidi: null,
-    lastDirection: 0,
-    repeatedDirectionCount: 0,
+export function createInfinitePhraseEventRuntime(settings = {}, seed = 1, makeRandom) {
+  return {
+    settings,
+    random: makeRandom(seed + 48031),
+    phraseState: {
+      previousMidi: null,
+      lastDirection: 0,
+      repeatedDirectionCount: 0,
+    },
+    previousSection: null,
   };
+}
 
-  sections.forEach((section, sectionIndex) => {
-    const previousSection = sections[sectionIndex - 1] || section;
+export function appendInfinitePhraseEvents(runtime, sections = []) {
+  const events = [];
+  const random = runtime.random;
+  const settings = runtime.settings;
+  const phraseState = runtime.phraseState;
+
+  sections.forEach((section, localIndex) => {
+    const sectionIndex = section.sectionIndex ?? localIndex;
+    const previousSection = runtime.previousSection || section;
     const noteCount = getPhraseNoteCount(section.durationBeats, settings.arpDensity ?? 0.5);
     const offsets = getPhraseOffsets(section.durationBeats, noteCount, settings.arpFeel);
 
@@ -399,7 +410,14 @@ export function buildInfinitePhraseEvents(sections, settings = {}, seed = 1, mak
       const durationBeats = getPhraseDuration(note.weightClass, startBeat, nextBeat, section.startBeat + section.durationBeats, random);
       events.push(buildPhraseEvent(note, section, sectionIndex, startBeat, durationBeats, stepIndex, random, settings));
     }
+
+    runtime.previousSection = section;
   });
 
-  return events.sort((left, right) => left.startBeat - right.startBeat);
+  return events;
+}
+
+export function buildInfinitePhraseEvents(sections, settings = {}, seed = 1, makeRandom) {
+  const runtime = createInfinitePhraseEventRuntime(settings, seed, makeRandom);
+  return appendInfinitePhraseEvents(runtime, sections).sort((left, right) => left.startBeat - right.startBeat);
 }

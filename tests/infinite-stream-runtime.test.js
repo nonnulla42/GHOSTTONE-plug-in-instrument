@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { generatePattern } from "../src/core/ghosttone-core.js";
+import { buildPatternEventsForSections, generatePattern } from "../src/core/ghosttone-core.js";
+import { buildInfiniteSectionSequence } from "../src/core/harmonic-infinite.js";
 import { createInfiniteStreamRuntime, ensureInfiniteBeats } from "../src/core/infinite-stream-runtime.js";
 
 const progression = [
@@ -208,6 +209,69 @@ test("streaming infinite phrase extends with phrase events and absolute beats", 
   assert.ok(pattern.events.every((event) => event.motionType === "infinitePhrase"));
 });
 
+test("streaming runtime keeps a smaller live window than the full generated timeline", () => {
+  const settings = {
+    generatorMode: "infinite",
+    harmonicMotion: 0.3,
+    mode: "arp",
+    harmonyLock: 0.45,
+    stayMusical: true,
+  };
+  const pattern = generatePattern(settings, progression, 7301);
+  const runtime = createInfiniteStreamRuntime(pattern, settings, 7301, {
+    initialLoopCount: 1,
+    extendLoopCount: 2,
+    lowWaterBeats: 16,
+    retainPastBeats: 8,
+    retainFutureBeats: 12,
+    windowUpdateStepBeats: 1,
+  });
+
+  ensureInfiniteBeats(runtime, 31.8);
+
+  assert.ok(runtime.pattern.sections.length > runtime.windowPattern.sections.length);
+  assert.ok(runtime.pattern.events.length > runtime.windowPattern.events.length);
+  assert.ok(runtime.windowPattern.events.every((event) => event.startBeat >= runtime.windowPattern.windowStartBeat - event.durationBeats));
+  assert.ok(runtime.windowPattern.events.every((event) => event.startBeat <= runtime.windowPattern.windowEndBeat));
+  assert.equal(runtime.windowPattern.loopBeats, runtime.pattern.loopBeats);
+});
+
+test("incremental extension matches the deterministic full rebuild result", () => {
+  const settings = {
+    generatorMode: "infinite",
+    harmonicMotion: 0.34,
+    mode: "arp",
+    harmonyLock: 0.51,
+    stayMusical: true,
+    memoryStrength: 0.4,
+  };
+  const seed = 7351;
+  const pattern = generatePattern(settings, progression, seed);
+  const runtime = createInfiniteStreamRuntime(pattern, settings, seed, {
+    initialLoopCount: 1,
+    extendLoopCount: 1,
+    lowWaterBeats: 16,
+  });
+
+  ensureInfiniteBeats(runtime, 15.8);
+  ensureInfiniteBeats(runtime, 31.8);
+
+  const expectedSections = buildInfiniteSectionSequence(
+    pattern.templateSections,
+    settings,
+    seed,
+    pattern.sections.length,
+    makeRandom,
+  );
+  const expectedEvents = buildPatternEventsForSections(expectedSections, settings, seed);
+
+  assert.deepEqual(pattern.sections, expectedSections);
+  assert.deepEqual(
+    pattern.events.map(stripEventId),
+    expectedEvents.map(stripEventId),
+  );
+});
+
 function averageAdjacentSimilarity(sections) {
   const scores = [];
   for (let index = 1; index < sections.length; index += 1) {
@@ -254,4 +318,18 @@ function sectionSignature(section) {
       .map((note) => [note.pc, note.midi])
       .sort((left, right) => left[1] - right[1] || left[0] - right[0]),
   });
+}
+
+function stripEventId(event) {
+  const { id: _id, ...rest } = event;
+  return rest;
+}
+
+function makeRandom(seed) {
+  let value = Math.trunc(seed) % 2147483647;
+  if (value <= 0) value += 2147483646;
+  return () => {
+    value = (value * 16807) % 2147483647;
+    return (value - 1) / 2147483646;
+  };
 }
