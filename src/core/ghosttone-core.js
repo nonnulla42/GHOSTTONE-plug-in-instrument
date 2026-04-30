@@ -7,6 +7,9 @@ import {
 } from "./harmonic-roles.js";
 import { buildInfiniteSections } from "./harmonic-infinite.js";
 import { appendInfinitePhraseEvents, buildInfinitePhraseEvents, createInfinitePhraseEventRuntime } from "./infinite-phrase.js";
+import { getBeatsPerBar, getMeterGrouping, getSlotsPerBar, normalizeTimeSignature } from "./meter.js";
+
+export { getBeatsPerBar, getSlotsPerBar, getMeterGrouping };
 
 const noteMap = {
   C: 0,
@@ -46,6 +49,7 @@ const roleIntensity = {
 
 export const defaultSettings = Object.freeze({
   generatorMode: "classic",
+  timeSignature: "4/4",
   harmonicMotion: 0.3,
   harmonicDistanceTarget: 1,
   harmonicDistanceFalloff: 1,
@@ -115,6 +119,7 @@ function normalizeSettings(settings = {}) {
   return {
     ...merged,
     generatorMode: ["classic", "roleBased", "infinite", "infinitePhrase"].includes(merged.generatorMode) ? merged.generatorMode : defaultSettings.generatorMode,
+    timeSignature: normalizeTimeSignature(merged.timeSignature),
     harmonicMotion: (Number.isFinite(Number(merged.harmonicMotion)) ? Math.max(0, Math.min(1, Number(merged.harmonicMotion))) : defaultSettings.harmonicMotion),
     harmonicDistanceTarget: normalizeDistanceTarget(merged.harmonicDistanceTarget, defaultSettings.harmonicDistanceTarget),
     harmonicDistanceFalloff: normalizeDistanceFalloff(merged.harmonicDistanceFalloff, defaultSettings.harmonicDistanceFalloff),
@@ -405,10 +410,11 @@ function getArpDuration(sectionBeats, offsets, index, settings) {
 export function buildSections(progression, settings, seed) {
   const sections = [];
   let previousNotes = null;
+  const beatsPerBar = getBeatsPerBar(settings);
 
   progression.forEach((barState, barIndex) => {
     const slotCount = barState.split ? 2 : 1;
-    const durationBeats = 4 / slotCount;
+    const durationBeats = beatsPerBar / slotCount;
 
     for (let slotIndex = 0; slotIndex < slotCount; slotIndex += 1) {
       const slotState = barState.slots[slotIndex] || barState.slots[0];
@@ -427,7 +433,7 @@ export function buildSections(progression, settings, seed) {
         baseNotes: roleLabeledNotes,
         barIndex,
         slotIndex,
-        startBeat: barIndex * 4 + slotIndex * durationBeats,
+        startBeat: barIndex * beatsPerBar + slotIndex * durationBeats,
         durationBeats,
         slotState: { voicingSeed: slotState.voicingSeed, arpSeed: slotState.arpSeed },
       });
@@ -944,6 +950,7 @@ export function generatePattern(settings = {}, progression = defaultProgression,
   const normalizedSettings = normalizeSettings(settings);
   const normalizedProgression = normalizeProgression(progression);
   const normalizedSeed = seedToInt(seed);
+  const beatsPerBar = getBeatsPerBar(normalizedSettings);
   const templateSections = buildSections(normalizedProgression, normalizedSettings, normalizedSeed);
   let sections = templateSections;
 
@@ -951,11 +958,15 @@ export function generatePattern(settings = {}, progression = defaultProgression,
     sections = buildInfiniteSections(sections, normalizedSettings, normalizedSeed, makeRandom);
   }
   const events = buildPatternEventsForSections(sections, normalizedSettings, normalizedSeed);
-  const templateLoopBeats = normalizedProgression.length * 4;
+  const templateLoopBeats = normalizedProgression.length * beatsPerBar;
 
   return {
     seed: normalizedSeed,
     settings: normalizedSettings,
+    timeSignature: normalizedSettings.timeSignature,
+    beatsPerBar,
+    slotsPerBar: getSlotsPerBar(normalizedSettings),
+    meterGrouping: getMeterGrouping(normalizedSettings),
     generatorMode: normalizedSettings.generatorMode,
     progression: normalizedProgression,
     loopBeats: sections.reduce((max, section) => Math.max(max, section.startBeat + section.durationBeats), templateLoopBeats),

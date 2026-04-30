@@ -20,6 +20,7 @@ export function createInfiniteStreamRuntime(pattern, settings, seed, options = {
   const sectionsPerLoop = templateSections.length;
   const initialLoopCount = Math.max(1, Math.trunc(options.initialLoopCount || 2));
   const extendLoopCount = Math.max(1, Math.trunc(options.extendLoopCount || 2));
+  const beatsPerBar = Number(pattern.beatsPerBar) > 0 ? Number(pattern.beatsPerBar) : 4;
   const lowWaterBeats = Number(options.lowWaterBeats) > 0 ? Number(options.lowWaterBeats) : templateLoopBeats;
   const retainPastBeats = Number(options.retainPastBeats) > 0 ? Number(options.retainPastBeats) : templateLoopBeats;
   const retainFutureBeats = Number(options.retainFutureBeats) > 0
@@ -37,6 +38,7 @@ export function createInfiniteStreamRuntime(pattern, settings, seed, options = {
     sectionsPerLoop,
     initialLoopCount,
     extendLoopCount,
+    beatsPerBar,
     lowWaterBeats,
     retainPastBeats,
     retainFutureBeats,
@@ -51,9 +53,9 @@ export function createInfiniteStreamRuntime(pattern, settings, seed, options = {
     sectionRuntime: createInfiniteSectionRuntime(templateSections, settings, seed, makeRandom),
     eventRuntime: createInfinitePatternEventRuntime(settings, seed),
     currentHarmonicState: null,
-    generatedBars: Math.floor((pattern.loopBeats || templateLoopBeats) / 4),
+    generatedBars: Math.floor((pattern.loopBeats || templateLoopBeats) / beatsPerBar),
     generatedEvents: pattern.events.length,
-    nextBarToGenerate: Math.floor((pattern.loopBeats || templateLoopBeats) / 4),
+    nextBarToGenerate: Math.floor((pattern.loopBeats || templateLoopBeats) / beatsPerBar),
     history: pattern.sections.slice(-8).map((section) => section.state).filter(Boolean),
     totalSectionCount: pattern.sections.length,
     lastWindowShiftBeat: null,
@@ -111,7 +113,7 @@ export function extendInfiniteRuntime(runtime, loopCount = runtime.extendLoopCou
     runtime.templateLoopBeats,
   );
   runtime.currentHarmonicState = runtime.sectionRuntime.currentState || runtime.currentHarmonicState;
-  runtime.generatedBars = Math.floor(runtime.pattern.loopBeats / 4);
+  runtime.generatedBars = Math.floor(runtime.pattern.loopBeats / runtime.beatsPerBar);
   runtime.generatedEvents = runtime.pattern.events.length;
   runtime.nextBarToGenerate = runtime.generatedBars;
   runtime.history = runtime.pattern.sections.slice(-8).map((section) => section.state).filter(Boolean);

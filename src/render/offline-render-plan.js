@@ -1,4 +1,5 @@
 import { generatePattern } from "../core/ghosttone-core.js";
+import { getBeatsPerBar } from "../core/meter.js";
 import { beatsToSamples, samplesToBeats, scheduleEventsForBlock } from "../adapters/host-time-adapter.js";
 import { normalizePatch, patchToCoreSettings, patchToProgression } from "../state/patch-state.js";
 
@@ -61,7 +62,8 @@ function normalizeRenderOptions(patch, options) {
   const sampleRate = readPositive(options.sampleRate, "sampleRate");
   const blockSize = Math.trunc(readPositive(options.blockSize, "blockSize"));
   const startBeat = readFinite(options.startBeat ?? 0, "startBeat");
-  const endBeat = readFinite(options.endBeat ?? patch.barStates.length * 4, "endBeat");
+  const beatsPerBar = getBeatsPerBar(patch.core);
+  const endBeat = readFinite(options.endBeat ?? patch.barStates.length * beatsPerBar, "endBeat");
 
   if (startBeat < 0) {
     throw new RangeError("startBeat must be non-negative");
@@ -94,4 +96,3 @@ function readFinite(value, label) {
   }
   return number;
 }
-

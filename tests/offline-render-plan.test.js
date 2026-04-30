@@ -123,3 +123,21 @@ test("rejects invalid render options", () => {
   assert.throws(() => createOfflineRenderPlan(patch, { bpm: 120, sampleRate: 0, endBeat: 1, blockSize: 128 }), /sampleRate/);
   assert.throws(() => createOfflineRenderPlan(patch, { bpm: 120, sampleRate: 48000, startBeat: 2, endBeat: 1, blockSize: 128 }), /endBeat/);
 });
+
+test("default offline render range follows selected time signature", () => {
+  const patch = createDefaultPatch({
+    core: {
+      ...createDefaultPatch().core,
+      timeSignature: "5/4",
+    },
+  });
+  const plan = createOfflineRenderPlan(patch, {
+    bpm: 120,
+    sampleRate: 48000,
+    blockSize: 24000,
+  });
+
+  assert.equal(plan.startBeat, 0);
+  assert.equal(plan.endBeat, 20);
+  assert.equal(plan.durationBeats, 20);
+});

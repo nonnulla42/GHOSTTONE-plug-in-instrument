@@ -1,4 +1,5 @@
 import { clamp } from "./ui-adapter.js";
+import { getBeatsPerBar } from "../core/meter.js";
 
 function encodeVarLen(value) {
   let buffer = value & 0x7f;
@@ -101,7 +102,7 @@ export function exportMidi(pattern, bpm, sound) {
 
 export function exportInfiniteMidi(pattern, bpm, sound) {
   const MAX_BARS = 16;
-  const beatsPerBar = pattern.templateLoopBeats / Math.max(1, pattern.templateSections?.length || 1);
+  const beatsPerBar = Number(pattern.beatsPerBar) || getBeatsPerBar(pattern.timeSignature || pattern.settings);
   const maxBeats = MAX_BARS * beatsPerBar;
 
   const filteredEvents = pattern.events
@@ -112,4 +113,3 @@ export function exportInfiniteMidi(pattern, bpm, sound) {
   const loopBeats = Math.min(pattern.loopBeats, maxBeats);
   downloadMidi(buildMidiBytes(filteredEvents, loopBeats, bpm, sound), "ghosttone-infinite.mid");
 }
-

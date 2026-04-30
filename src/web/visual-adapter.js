@@ -80,9 +80,13 @@ export class GridVisualizer {
 
     const firstMarkerBeat = Math.floor(range.startBeat);
     const lastMarkerBeat = Math.ceil(range.endBeat);
+    const grouping = pattern.meterGrouping || [4];
+    const beatsPerBar = pattern.beatsPerBar || grouping.reduce((sum, beats) => sum + beats, 0) || 4;
     for (let beat = firstMarkerBeat; beat <= lastMarkerBeat; beat += 1) {
       const marker = document.createElement("div");
-      marker.className = beat % 4 === 0 ? "beat-marker strong" : "beat-marker";
+      const beatInBar = ((beat % beatsPerBar) + beatsPerBar) % beatsPerBar;
+      const isStrong = beatInBar === 0 || grouping.slice(0, -1).some((offset) => beatInBar === offset);
+      marker.className = isStrong ? "beat-marker strong" : "beat-marker";
       marker.style.left = `${beatToViewportX(beat, range)}%`;
       beatLayer.appendChild(marker);
     }

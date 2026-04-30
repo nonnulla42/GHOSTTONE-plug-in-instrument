@@ -42,6 +42,15 @@
             <span>BPM</span>
             <input id="bpm" type="number" min="40" max="180" value="92" />
           </label>
+          <label class="preset-control">
+            <span>Time Signature</span>
+            <select id="timeSignature">
+              <option value="3/4">3/4</option>
+              <option value="4/4" selected>4/4</option>
+              <option value="5/4">5/4</option>
+              <option value="7/4">7/4</option>
+            </select>
+          </label>
           <button id="playButton" class="primary-button" type="button">Play</button>
           <button id="generateButton" class="icon-button" type="button" aria-label="Generate new pattern" title="Generate new pattern">R</button>
           <button id="exportButton" class="secondary-button" type="button">Export MIDI</button>

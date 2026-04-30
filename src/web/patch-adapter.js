@@ -1,7 +1,7 @@
 import { createPatchFromPreset, normalizePatch } from "../state/patch-state.js";
 
 const coreRangeControls = ["ghostAmount", "drift", "harmonyLock", "harmonicMotion", "voicingVariation", "voicingContinuity", "arpDensity", "arpContinuity", "scaleInfluence", "memoryStrength", "registerCenter"];
-const coreSelectControls = ["colorMode", "voicingStyle", "arpDirection", "arpFeel", "localScaleType", "localTargetDegree", "globalRoot", "scaleName"];
+const coreSelectControls = ["timeSignature", "colorMode", "voicingStyle", "arpDirection", "arpFeel", "localScaleType", "localTargetDegree", "globalRoot", "scaleName"];
 const coreToggleControls = ["stayMusical", "ghostEnabled", "localDegreeFalloff"];
 const soundControls = ["waveform", "cutoff", "attack", "release", "space", "reverbMix", "delayMix"];
 
@@ -55,6 +55,7 @@ export function updateCompareUi(root, activeSlot) {
 function readControlGroup(els, ids) {
   return ids.reduce((values, id) => {
     const control = els[id];
+    if (!control) return values;
     values[id] = control.type === "checkbox" ? control.checked : control.value;
     return values;
   }, {});

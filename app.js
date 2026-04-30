@@ -408,6 +408,7 @@ function bindEvents() {
     els.arpFeel,
     els.arpDensity,
     els.arpContinuity,
+    els.timeSignature,
     els.globalRoot,
     els.scaleName,
     els.scaleInfluence,

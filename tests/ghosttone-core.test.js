@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { generatePattern, parseChord } from "../src/core/ghosttone-core.js";
+import { generatePattern, getBeatsPerBar, getMeterGrouping, getSlotsPerBar, parseChord } from "../src/core/ghosttone-core.js";
 import { getNoteSimilarity } from "../src/core/harmonic-chord-evolution.js";
 
 const progression = [
@@ -110,6 +110,50 @@ test("generatePattern returns a fixed beat-based event contract", () => {
   assert.ok(["stay", "step", "leap"].includes(event.motionType));
   assert.ok(!("time" in event));
   assert.ok(!("duration" in event));
+});
+
+test("time signatures produce expected loop length for four bars", () => {
+  assert.equal(generatePattern({ mode: "pad", timeSignature: "4/4" }, cmaj7Progression(4), 15001).loopBeats, 16);
+  assert.equal(generatePattern({ mode: "pad", timeSignature: "3/4" }, cmaj7Progression(4), 15002).loopBeats, 12);
+  assert.equal(generatePattern({ mode: "pad", timeSignature: "5/4" }, cmaj7Progression(4), 15003).loopBeats, 20);
+  assert.equal(generatePattern({ mode: "pad", timeSignature: "7/4" }, cmaj7Progression(4), 15004).loopBeats, 28);
+});
+
+test("meter helpers expose beats, slots, and grouping", () => {
+  assert.equal(getBeatsPerBar("3/4"), 3);
+  assert.equal(getBeatsPerBar("4/4"), 4);
+  assert.equal(getBeatsPerBar("5/4"), 5);
+  assert.equal(getBeatsPerBar("7/4"), 7);
+
+  assert.equal(getSlotsPerBar("3/4"), 12);
+  assert.equal(getSlotsPerBar("4/4"), 16);
+  assert.equal(getSlotsPerBar("5/4"), 20);
+  assert.equal(getSlotsPerBar("7/4"), 28);
+
+  assert.deepEqual(getMeterGrouping("3/4"), [2, 1]);
+  assert.deepEqual(getMeterGrouping("4/4"), [4]);
+  assert.deepEqual(getMeterGrouping("5/4"), [3, 2]);
+  assert.deepEqual(getMeterGrouping("7/4"), [4, 3]);
+});
+
+test("split bars divide the selected meter bar length", () => {
+  const splitProgression = [
+    {
+      split: true,
+      slots: [
+        { chord: "Am9", voicingSeed: 0, arpSeed: 0 },
+        { chord: "Fmaj7", voicingSeed: 0, arpSeed: 0 },
+      ],
+    },
+  ];
+
+  const three = generatePattern({ mode: "pad", timeSignature: "3/4" }, splitProgression, 15011);
+  const five = generatePattern({ mode: "pad", timeSignature: "5/4" }, splitProgression, 15012);
+  const seven = generatePattern({ mode: "pad", timeSignature: "7/4" }, splitProgression, 15013);
+
+  assert.deepEqual(three.sections.map((section) => section.durationBeats), [1.5, 1.5]);
+  assert.deepEqual(five.sections.map((section) => section.durationBeats), [2.5, 2.5]);
+  assert.deepEqual(seven.sections.map((section) => section.durationBeats), [3.5, 3.5]);
 });
 
 test("spread voicing creates a wider register than close voicing", () => {
@@ -503,6 +547,32 @@ test("infinite phrase uses sixteenth-note timing buckets without overlap", () =>
   assert.ok(result.events.every((event) => Math.abs(event.startBeat * 4 - Math.round(event.startBeat * 4)) < 1e-6));
   assert.ok(result.events.every((event) => Math.abs(event.durationBeats * 4 - Math.round(event.durationBeats * 4)) < 1e-6));
   assertNoVoiceOverlaps(result.events);
+});
+
+test("infinite phrase events stay within section boundaries in odd meter", () => {
+  const result = generatePattern({
+    generatorMode: "infinitePhrase",
+    timeSignature: "7/4",
+    harmonicMotion: 0.34,
+    harmonyLock: 0.6,
+    stayMusical: true,
+    ghostEnabled: false,
+    localScaleType: "minor",
+    localTargetDegree: 5,
+    localDegreeFalloff: 1,
+    globalRoot: "9",
+    scaleName: "minor",
+    scaleInfluence: 0.55,
+    arpDensity: 0.78,
+    arpFeel: "broken",
+  }, progression, 15021);
+
+  result.events.forEach((event) => {
+    const section = result.sections[event.sectionIndex];
+    const sectionEnd = section.startBeat + section.durationBeats;
+    assert.ok(event.startBeat >= section.startBeat - 1e-6);
+    assert.ok(event.startBeat + event.durationBeats <= sectionEnd + 1e-6);
+  });
 });
 
 function range(values) {

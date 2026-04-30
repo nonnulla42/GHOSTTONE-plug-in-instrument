@@ -20,6 +20,7 @@ export const DEFAULT_PATCH = Object.freeze({
   ]),
   core: Object.freeze({
     generatorMode: "classic",
+    timeSignature: "4/4",
     harmonicMotion: 30,
     harmonicDistanceTarget: 1,
     harmonicDistanceFalloff: 1,
@@ -138,6 +139,7 @@ export function patchToCoreSettings(patch) {
   const normalized = normalizePatch(patch);
   return {
     generatorMode: normalized.core.generatorMode,
+    timeSignature: normalized.core.timeSignature,
     harmonicMotion: normalized.core.harmonicMotion / 100,
     harmonicDistanceTarget: normalized.core.harmonicDistanceTarget,
     harmonicDistanceFalloff: normalized.core.harmonicDistanceFalloff,
@@ -253,6 +255,7 @@ export function clonePatchState(state) {
 function normalizeCore(core = {}) {
   return {
     generatorMode: ["classic", "roleBased", "infinite", "infinitePhrase"].includes(core.generatorMode) ? core.generatorMode : DEFAULT_PATCH.core.generatorMode,
+    timeSignature: ["3/4", "4/4", "5/4", "7/4"].includes(core.timeSignature) ? core.timeSignature : DEFAULT_PATCH.core.timeSignature,
     harmonicMotion: clampNumber(core.harmonicMotion, 0, 100, DEFAULT_PATCH.core.harmonicMotion),
     harmonicDistanceTarget: normalizeInt(core.harmonicDistanceTarget, DEFAULT_PATCH.core.harmonicDistanceTarget, 0) % 12,
     harmonicDistanceFalloff: clampNumber(core.harmonicDistanceFalloff, 0, 6, DEFAULT_PATCH.core.harmonicDistanceFalloff),

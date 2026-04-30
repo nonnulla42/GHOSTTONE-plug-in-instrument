@@ -36,6 +36,7 @@ test("normalizes unsafe patch values", () => {
         sound: "wrong",
         core: {
           generatorMode: "chaos",
+          timeSignature: "9/8",
           harmonicMotion: "panic",
           ghostAmount: 200,
           drift: -4,
@@ -54,6 +55,7 @@ test("normalizes unsafe patch values", () => {
   assert.equal(restored.slots.B.bpm, 240);
   assert.equal(restored.slots.B.mode, "pad");
   assert.equal(restored.slots.B.core.generatorMode, "classic");
+  assert.equal(restored.slots.B.core.timeSignature, "4/4");
   assert.equal(restored.slots.B.core.harmonicMotion, 30);
   assert.equal(restored.slots.B.core.harmonicDistanceTarget, 1);
   assert.equal(restored.slots.B.core.harmonicDistanceFalloff, 1);
@@ -86,6 +88,7 @@ test("patch conversion feeds core, progression, and sound adapters", () => {
 
   assert.equal(patchToCoreSettings(patch).ghostAmount, 0.48);
   assert.equal(patchToCoreSettings(patch).generatorMode, "classic");
+  assert.equal(patchToCoreSettings(patch).timeSignature, "4/4");
   assert.equal(patchToCoreSettings(patch).harmonicMotion, 0.3);
   assert.equal(patchToCoreSettings(patch).harmonicDistanceTarget, 1);
   assert.equal(patchToCoreSettings(patch).mode, "pad");
@@ -101,11 +104,13 @@ test("patch conversion preserves role-based generator mode", () => {
     core: {
       ...createDefaultPatch().core,
       generatorMode: "roleBased",
+      timeSignature: "5/4",
       harmonicMotion: 100,
     },
   });
 
   assert.equal(patchToCoreSettings(patch).generatorMode, "roleBased");
+  assert.equal(patchToCoreSettings(patch).timeSignature, "5/4");
   assert.equal(patchToCoreSettings(patch).harmonicMotion, 1);
 });
 

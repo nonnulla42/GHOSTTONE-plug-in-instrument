@@ -2,6 +2,7 @@ import { scheduleEventsForBlock, samplesToBeats } from "../adapters/host-time-ad
 import { buildSynthVoicePlan, createWebAudioSynthVoice } from "../audio/synth-voice.js";
 import { VoiceManager } from "../audio/voice-manager.js";
 import { createInfiniteStreamRuntime, ensureInfiniteBeats } from "../core/infinite-stream-runtime.js";
+import { getBeatsPerBar } from "../core/meter.js";
 
 function createConvolutionReverb(ctx, decaySeconds = 3.5) {
   const length = Math.round(ctx.sampleRate * decaySeconds);
@@ -57,6 +58,14 @@ export function scheduleBrowserEvents(events, context) {
 
 function isInfiniteGeneratorMode(value) {
   return value === "infinite" || value === "infinitePhrase";
+}
+
+function readPatternBeatsPerBar(pattern) {
+  if (!pattern) return 4;
+  if (Number.isFinite(pattern.beatsPerBar) && pattern.beatsPerBar > 0) return pattern.beatsPerBar;
+  if (pattern.settings?.timeSignature) return getBeatsPerBar(pattern.settings);
+  if (pattern.timeSignature) return getBeatsPerBar(pattern.timeSignature);
+  return 4;
 }
 
 const LIVE_INFINITE_RUNTIME_OPTIONS = Object.freeze({
@@ -203,7 +212,7 @@ export class WebAudioEngine {
     this.updateMasterFx(soundSettings, bpm);
   }
 
-  // Deferred: new pattern takes effect at the next bar boundary (beat multiple of 4).
+  // Deferred: new pattern takes effect at the next bar boundary.
   // Use for generative params: voicing, arp, scale, harmonic motion, etc.
   schedulePatternSwap(pattern, coreSettings, soundSettings, bpm) {
     if (!this.isPlaying) return;
@@ -217,7 +226,8 @@ export class WebAudioEngine {
 
     // Apply pending pattern swap at the next bar boundary
     if (this.pendingUpdate && this.lastScheduledBeat != null) {
-      const nextBar = Math.ceil((this.lastScheduledBeat + 0.001) / 4) * 4;
+      const beatsPerBar = readPatternBeatsPerBar(this.currentPattern);
+      const nextBar = Math.ceil((this.lastScheduledBeat + 0.001) / beatsPerBar) * beatsPerBar;
       const secsToNextBar = (nextBar - this.lastScheduledBeat) * (60 / this.currentBpm);
       if (secsToNextBar <= this.lookaheadSeconds + 0.05) {
         const { pattern, coreSettings, soundSettings, bpm } = this.pendingUpdate;

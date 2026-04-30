@@ -35,6 +35,7 @@ export function getElements(root = document) {
     arpFeel: root.querySelector("#arpFeel"),
     arpDensity: root.querySelector("#arpDensity"),
     arpContinuity: root.querySelector("#arpContinuity"),
+    timeSignature: root.querySelector("#timeSignature"),
     globalRoot: root.querySelector("#globalRoot"),
     scaleName: root.querySelector("#scaleName"),
     scaleInfluence: root.querySelector("#scaleInfluence"),
@@ -92,6 +93,7 @@ export function readBpm(els) {
 export function readCoreSettings(els, mode, generatorMode = "classic") {
   return {
     generatorMode,
+    timeSignature: els.timeSignature?.value ?? "4/4",
     mode,
     ghostAmount: Number(els.ghostAmount.value) / 100,
     drift: Number(els.drift.value) / 100,
@@ -217,7 +219,8 @@ export function updateReadouts(els, pattern, settings, bpm, soundSettings, curre
   els.rangeReadout.textContent = `+/-${Math.round(maxOffset)} cents`;
   els.eventReadout.textContent = String(pattern.events.length);
   els.currentChord.textContent = pattern.sections[currentSectionIndex]?.label || "-";
-  els.patternTitle.textContent = `${capitalize(settings.colorMode)} ${formatGeneratorMode(settings.generatorMode)} ${settings.mode} at ${bpm} BPM`;
+  const signature = settings.timeSignature || "4/4";
+  els.patternTitle.textContent = `${capitalize(settings.colorMode)} ${formatGeneratorMode(settings.generatorMode)} ${settings.mode} ${signature} at ${bpm} BPM`;
   if (els.seedValue) els.seedValue.value = String(pattern.seed);
 }
 
