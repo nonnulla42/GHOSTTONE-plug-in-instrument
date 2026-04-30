@@ -104,12 +104,24 @@ export function exportInfiniteMidi(pattern, bpm, sound) {
   const MAX_BARS = 16;
   const beatsPerBar = Number(pattern.beatsPerBar) || getBeatsPerBar(pattern.timeSignature || pattern.settings);
   const maxBeats = MAX_BARS * beatsPerBar;
+  const isInfinite = pattern.generatorMode === "infinite" || pattern.generatorMode === "infinitePhrase";
+  const latestEventEndBeat = pattern.events.reduce(
+    (max, event) => Math.max(max, event.startBeat + event.durationBeats),
+    0,
+  );
+  const patternEndBeat = Math.max(Number(pattern.loopBeats) || 0, latestEventEndBeat);
+  const windowEndBeat = isInfinite ? patternEndBeat : Math.min(patternEndBeat, maxBeats);
+  const windowStartBeat = Math.max(0, windowEndBeat - maxBeats);
 
   const filteredEvents = pattern.events
-    .filter((e) => e.startBeat < maxBeats)
-    .map((e) => ({ ...e, durationBeats: Math.min(e.durationBeats, maxBeats - e.startBeat) }))
+    .filter((event) => event.startBeat >= windowStartBeat && event.startBeat < windowEndBeat)
+    .map((event) => ({
+      ...event,
+      startBeat: event.startBeat - windowStartBeat,
+      durationBeats: Math.min(event.durationBeats, windowEndBeat - event.startBeat),
+    }))
     .sort((a, b) => a.startBeat - b.startBeat);
 
-  const loopBeats = Math.min(pattern.loopBeats, maxBeats);
+  const loopBeats = Math.max(0.5, Math.min(maxBeats, windowEndBeat - windowStartBeat));
   downloadMidi(buildMidiBytes(filteredEvents, loopBeats, bpm, sound), "ghosttone-infinite.mid");
 }
