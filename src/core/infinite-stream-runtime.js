@@ -6,7 +6,7 @@ function cloneTemplateSections(sections) {
     ...section,
     notes: section.notes.map((note) => ({ ...note })),
     baseNotes: section.baseNotes?.map((note) => ({ ...note })) || [],
-    slotState: { ...section.slotState },
+    slotState: { ...(section.slotState || {}) },
   }));
 }
 

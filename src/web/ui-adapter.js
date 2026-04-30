@@ -15,8 +15,6 @@ export function getElements(root = document) {
     bpm: root.querySelector("#bpm"),
     chordInputs: [...root.querySelectorAll(".chord-input")],
     splitButtons: [...root.querySelectorAll(".split-button")],
-    voiceButtons: [...root.querySelectorAll(".voice-button")],
-    arpButtons: [...root.querySelectorAll(".arp-button")],
     ghostAmount: root.querySelector("#ghostAmount"),
     drift: root.querySelector("#drift"),
     harmonyLock: root.querySelector("#harmonyLock"),
@@ -142,7 +140,7 @@ export function readProgression(els, barStates) {
       const input = els.chordInputs.find((control) => Number(control.dataset.bar) === barIndex && Number(control.dataset.slot) === slotIndex);
       const slotState = barState.slots[slotIndex];
       slots.push({
-        chord: input?.value || "C",
+        chord: input?.value ?? "",
         voicingSeed: slotState.voicingSeed,
         arpSeed: slotState.arpSeed,
       });
@@ -160,20 +158,16 @@ export function refreshProgressionUi(barStates, root = document) {
     const card = root.querySelector(`.bar-card[data-bar="${barIndex}"]`);
     const variation = root.querySelector(`.variation-slot[data-bar="${barIndex}"]`);
     const splitButton = root.querySelector(`.split-button[data-bar="${barIndex}"]`);
+    const variationInput = root.querySelector(`.chord-input[data-bar="${barIndex}"][data-slot="1"]`);
 
     card?.classList.toggle("is-split", barState.split);
-    if (variation) variation.hidden = !barState.split;
+    variation?.classList.toggle("is-disabled", !barState.split);
+    if (variationInput) variationInput.disabled = !barState.split;
     if (splitButton) {
       splitButton.classList.toggle("active", barState.split);
       splitButton.textContent = barState.split ? "Unsplit" : "Split";
     }
 
-    barState.slots.forEach((slotState, slotIndex) => {
-      const voiceButton = root.querySelector(`.voice-button[data-bar="${barIndex}"][data-slot="${slotIndex}"]`);
-      const arpButton = root.querySelector(`.arp-button[data-bar="${barIndex}"][data-slot="${slotIndex}"]`);
-      voiceButton?.classList.toggle("active", Boolean(slotState.voicingSeed));
-      arpButton?.classList.toggle("active", Boolean(slotState.arpSeed));
-    });
   });
 }
 

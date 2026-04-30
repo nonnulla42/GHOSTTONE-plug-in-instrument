@@ -71,10 +71,10 @@ export const defaultSettings = Object.freeze({
 });
 
 export const defaultProgression = Object.freeze([
-  { split: false, slots: [{ chord: "Am9", voicingSeed: 0, arpSeed: 0 }] },
-  { split: false, slots: [{ chord: "Fmaj7", voicingSeed: 0, arpSeed: 0 }] },
-  { split: false, slots: [{ chord: "Cadd9", voicingSeed: 0, arpSeed: 0 }] },
-  { split: false, slots: [{ chord: "Gsus4", voicingSeed: 0, arpSeed: 0 }] },
+  { split: false, slots: [{ chord: "Am9" }] },
+  { split: false, slots: [{ chord: "Fmaj7" }] },
+  { split: false, slots: [{ chord: "Cadd9" }] },
+  { split: false, slots: [{ chord: "Gsus4" }] },
 ]);
 
 function makeRandom(seed) {
@@ -101,11 +101,6 @@ function normalizePc(pc) {
 function seedToInt(seed) {
   const value = Number(seed);
   return Number.isFinite(value) ? Math.max(1, Math.trunc(value)) : 1;
-}
-
-function slotSeedToInt(seed) {
-  const value = Number(seed);
-  return Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
 }
 
 function normalizeUnit(value, fallback) {
@@ -151,30 +146,61 @@ function normalizeDistanceFalloff(value, fallback) {
 
 function normalizeSlot(slot, fallbackChord = "C") {
   if (typeof slot === "string") {
-    return { chord: slot, voicingSeed: 0, arpSeed: 0 };
+    return { chord: slot };
   }
 
+  const resolvedChord = slot?.chord ?? slot?.label ?? fallbackChord;
   return {
-    chord: slot?.chord || slot?.label || fallbackChord,
-    voicingSeed: slotSeedToInt(slot?.voicingSeed),
-    arpSeed: slotSeedToInt(slot?.arpSeed),
+    chord: typeof resolvedChord === "string" ? resolvedChord : String(resolvedChord ?? fallbackChord),
   };
+}
+
+function hasChordValue(slot) {
+  return Boolean(String(slot?.chord ?? "").trim());
 }
 
 function normalizeProgression(progression = defaultProgression) {
   const source = Array.isArray(progression) && progression.length ? progression : defaultProgression;
-
-  return source.map((bar, index) => {
+  const normalizedBars = source.map((bar, index) => {
     if (typeof bar === "string") {
       return { split: false, slots: [normalizeSlot(bar)] };
     }
 
-    const slots = Array.isArray(bar?.slots) && bar.slots.length ? bar.slots : [bar?.chord || defaultProgression[index % defaultProgression.length].slots[0].chord];
+    const fallbackChord = defaultProgression[index % defaultProgression.length].slots[0].chord;
+    const slots = Array.isArray(bar?.slots) && bar.slots.length ? bar.slots : [bar?.chord ?? fallbackChord];
+    const normalizedSlots = slots.slice(0, 2).map((slot) => normalizeSlot(slot, fallbackChord));
     return {
-      split: Boolean(bar?.split) && slots.length > 1,
-      slots: slots.slice(0, 2).map((slot) => normalizeSlot(slot, defaultProgression[index % defaultProgression.length].slots[0].chord)),
+      split: Boolean(bar?.split) && normalizedSlots.length > 1,
+      slots: normalizedSlots,
     };
   });
+
+  const compactedBars = normalizedBars.reduce((result, bar) => {
+    const visibleSlots = bar.slots.filter(hasChordValue);
+    if (!visibleSlots.length) return result;
+
+    if (bar.split && visibleSlots.length > 1) {
+      result.push({
+        split: true,
+        slots: visibleSlots.slice(0, 2),
+      });
+    } else {
+      result.push({
+        split: false,
+        slots: [visibleSlots[0]],
+      });
+    }
+    return result;
+  }, []);
+
+  if (compactedBars.length) {
+    return compactedBars;
+  }
+
+  return defaultProgression.map((bar) => ({
+    split: false,
+    slots: [{ chord: bar.slots[0].chord }],
+  }));
 }
 
 export function parseChord(input) {
@@ -253,16 +279,13 @@ function normalizeAscending(notes) {
   });
 }
 
-function applyVoicing(notes, slotState, settings, previousNotes, sectionIndex, seed) {
+function applyVoicing(notes, settings, previousNotes, sectionIndex, seed) {
   if (!notes.length) return [];
   const continuity = settings.voicingContinuity;
-  const rand = makeRandom(seed + sectionIndex * 997 + (slotState.voicingSeed || 0) + 11);
-  const seededShift = slotState.voicingSeed ? Math.floor(rand() * notes.length * 2) % notes.length : 0;
   const variation = settings.voicingVariation ?? 0;
   const variationRand = makeRandom(seed + sectionIndex * 100003 + 77);
   const variationShift = variation > 0 ? Math.floor(variationRand() * notes.length * variation) % notes.length : 0;
-  const effectiveShift = slotState.voicingSeed ? seededShift : variationShift;
-  const baseShift = effectiveShift;
+  const baseShift = variationShift;
   let voiced = normalizeAscending(rotateNotes(notes, baseShift));
 
   voiced = voiced.map((note, index) => {
@@ -360,11 +383,11 @@ function buildArpOrder(notes, section, settings, previousSection, seed) {
     insideout: insideOut,
     outsidein: outsideIn,
     bounce: [...ascending, ascending[Math.max(0, ascending.length - 2)], ascending[1] || ascending[0]].filter(Boolean),
-    free: shuffleNotes(ascending, seed + section.startBeat * 101 + (section.slotState.arpSeed || 0), 1),
+    free: shuffleNotes(ascending, seed + section.startBeat * 101, 1),
   };
 
   let order = directionMap[settings.arpDirection] || ascending;
-  if (previousSection && settings.arpContinuity > 0.55 && section.slotState.arpSeed === 0) {
+  if (previousSection && settings.arpContinuity > 0.55) {
     const previousOrder = buildArpOrder(previousSection.notes, previousSection, { ...settings, arpContinuity: 0 }, null, seed);
     order = previousOrder.map((previousNote, index) => {
       const target = order[index % order.length];
@@ -424,7 +447,7 @@ export function buildSections(progression, settings, seed) {
         harmonicRole: assignHarmonicRole(note),
       }));
       const sectionIndex = sections.length;
-      const voicedNotes = applyVoicing(roleLabeledNotes, slotState, settings, previousNotes, sectionIndex, seed);
+      const voicedNotes = applyVoicing(roleLabeledNotes, settings, previousNotes, sectionIndex, seed);
 
       sections.push({
         label: chord.label,
@@ -435,7 +458,7 @@ export function buildSections(progression, settings, seed) {
         slotIndex,
         startBeat: barIndex * beatsPerBar + slotIndex * durationBeats,
         durationBeats,
-        slotState: { voicingSeed: slotState.voicingSeed, arpSeed: slotState.arpSeed },
+        slotState: {},
       });
       previousNotes = voicedNotes;
     }

@@ -119,6 +119,42 @@ test("time signatures produce expected loop length for four bars", () => {
   assert.equal(generatePattern({ mode: "pad", timeSignature: "7/4" }, cmaj7Progression(4), 15004).loopBeats, 28);
 });
 
+test("loop length follows only non-empty chord slots", () => {
+  const sparse = [
+    { split: false, slots: [{ chord: "Am9" }] },
+    { split: false, slots: [{ chord: "Fmaj7" }] },
+    { split: false, slots: [{ chord: "Cadd9" }] },
+    { split: false, slots: [{ chord: "Gsus4" }] },
+    { split: false, slots: [{ chord: "" }] },
+    { split: false, slots: [{ chord: "   " }] },
+    { split: false, slots: [{ chord: "" }] },
+    { split: false, slots: [{ chord: "" }] },
+  ];
+
+  const four = generatePattern({ mode: "pad", timeSignature: "4/4" }, sparse, 15005);
+  assert.equal(four.progression.length, 4);
+  assert.equal(four.templateLoopBeats, 16);
+  assert.equal(four.loopBeats, 16);
+
+  const seven = generatePattern(
+    { mode: "pad", timeSignature: "4/4" },
+    [
+      { split: false, slots: [{ chord: "Am9" }] },
+      { split: false, slots: [{ chord: "Fmaj7" }] },
+      { split: false, slots: [{ chord: "Cadd9" }] },
+      { split: false, slots: [{ chord: "Gsus4" }] },
+      { split: false, slots: [{ chord: "Em9" }] },
+      { split: false, slots: [{ chord: "D7" }] },
+      { split: false, slots: [{ chord: "Bbmaj7" }] },
+      { split: false, slots: [{ chord: "" }] },
+    ],
+    15006,
+  );
+  assert.equal(seven.progression.length, 7);
+  assert.equal(seven.templateLoopBeats, 28);
+  assert.equal(seven.loopBeats, 28);
+});
+
 test("meter helpers expose beats, slots, and grouping", () => {
   assert.equal(getBeatsPerBar("3/4"), 3);
   assert.equal(getBeatsPerBar("4/4"), 4);

@@ -265,20 +265,6 @@ function toggleSplit(barIndex) {
   }));
 }
 
-function randomizeVoicing(barIndex, slotIndex) {
-  updateActivePatch((patch) => ({
-    ...patch,
-    barStates: updateSlotSeed(patch.barStates, barIndex, slotIndex, "voicingSeed"),
-  }));
-}
-
-function randomizeArp(barIndex, slotIndex) {
-  updateActivePatch((patch) => ({
-    ...patch,
-    barStates: updateSlotSeed(patch.barStates, barIndex, slotIndex, "arpSeed"),
-  }));
-}
-
 function regenerateSeed() {
   updateActivePatch((patch) => ({
     ...patch,
@@ -316,16 +302,6 @@ function importPatchJson(file) {
     }
   });
   reader.readAsText(file);
-}
-
-function updateSlotSeed(barStates, barIndex, slotIndex, seedKey) {
-  return barStates.map((bar, index) => {
-    if (index !== barIndex) return bar;
-    return {
-      ...bar,
-      slots: bar.slots.map((slot, innerIndex) => (innerIndex === slotIndex ? { ...slot, [seedKey]: Math.floor(Math.random() * 100000) + 1 } : slot)),
-    };
-  });
 }
 
 function bindEvents() {
@@ -384,12 +360,6 @@ function bindEvents() {
   });
   els.splitButtons.forEach((button) => {
     button.addEventListener("click", () => toggleSplit(Number(button.dataset.bar)));
-  });
-  els.voiceButtons.forEach((button) => {
-    button.addEventListener("click", () => randomizeVoicing(Number(button.dataset.bar), Number(button.dataset.slot)));
-  });
-  els.arpButtons.forEach((button) => {
-    button.addEventListener("click", () => randomizeArp(Number(button.dataset.bar), Number(button.dataset.slot)));
   });
 
   [

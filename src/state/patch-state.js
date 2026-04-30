@@ -204,7 +204,7 @@ export function patchToProgression(patch) {
     for (let slotIndex = 0; slotIndex < slotCount; slotIndex += 1) {
       const chord = normalized.chords.find((item) => item.bar === barIndex && item.slot === slotIndex);
       slots.push({
-        chord: chord?.value || "C",
+        chord: chord?.value ?? "",
         voicingSeed: barState.slots[slotIndex]?.voicingSeed || 0,
         arpSeed: barState.slots[slotIndex]?.arpSeed || 0,
       });
@@ -324,7 +324,7 @@ function normalizeChords(chords = DEFAULT_PATCH.chords) {
   return source.slice(0, MAX_CHORD_SLOTS).map((chord, index) => ({
     bar: normalizeInt(chord.bar, index, 0),
     slot: normalizeInt(chord.slot, 0, 0),
-    value: String(chord.value || "C"),
+    value: chord?.value == null ? "" : String(chord.value),
   }));
 }
 
