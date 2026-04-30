@@ -540,20 +540,20 @@ input[type="number"] {
 .control-strip .slider-row input,
 .control-strip .select-row select,
 .control-strip .snap-slider {
-  order: 3;
+  order: 1;
   grid-column: 1 / -1;
   width: 100%;
 }
 
 .control-strip .slider-row span,
 .control-strip .select-row span {
-  order: 1;
+  order: 2;
   text-align: left;
   justify-self: start;
 }
 
 .control-strip .slider-row strong {
-  order: 2;
+  order: 3;
   justify-self: end;
 }
 
@@ -673,32 +673,26 @@ input[type="number"] {
 
 .snap-slider {
   --snap-slots: 7;
-  --snap-gap: 6px;
-  --snap-cell: calc((100% - ((var(--snap-slots) - 1) * var(--snap-gap))) / var(--snap-slots));
+  --snap-fill: 0%;
   width: 100%;
   height: 16px;
   border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+  margin: 0;
+  position: relative;
+  z-index: 6;
   -webkit-appearance: none;
   appearance: none;
 }
 
 .snap-slider::-webkit-slider-runnable-track {
-  height: 10px;
+  height: 12px;
   border-radius: 4px;
   background:
-    repeating-linear-gradient(
-      90deg,
-      rgba(6, 13, 24, 0.98) 0 var(--snap-cell),
-      transparent var(--snap-cell) calc(var(--snap-cell) + var(--snap-gap))
-    ),
-    repeating-linear-gradient(
-      90deg,
-      rgba(113, 186, 255, 0.34) 0 1px,
-      transparent 1px calc(var(--snap-cell) + var(--snap-gap))
-    ),
+    linear-gradient(90deg, rgba(104, 240, 154, 0.92), rgba(104, 240, 154, 0.92))
+    left center / var(--snap-fill) 6px no-repeat,
     linear-gradient(180deg, rgba(12, 23, 38, 0.98) 0%, rgba(8, 15, 25, 0.99) 100%);
   box-shadow:
     inset 0 0 0 1px rgba(113, 186, 255, 0.18),
@@ -708,30 +702,22 @@ input[type="number"] {
 .snap-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 10px;
+  width: 8px;
   height: 16px;
-  margin-top: -3px;
-  border-radius: 3px;
+  margin-top: -2px;
+  border-radius: 2px;
   border: 1px solid rgba(219, 255, 230, 0.9);
   background: linear-gradient(180deg, #baf8cf 0%, #61db8f 100%);
   box-shadow: 0 0 10px rgba(80, 237, 127, 0.3);
 }
 
 .snap-slider::-moz-range-track {
-  height: 10px;
+  height: 12px;
   border: 0;
   border-radius: 4px;
   background:
-    repeating-linear-gradient(
-      90deg,
-      rgba(6, 13, 24, 0.98) 0 var(--snap-cell),
-      transparent var(--snap-cell) calc(var(--snap-cell) + var(--snap-gap))
-    ),
-    repeating-linear-gradient(
-      90deg,
-      rgba(113, 186, 255, 0.34) 0 1px,
-      transparent 1px calc(var(--snap-cell) + var(--snap-gap))
-    ),
+    linear-gradient(90deg, rgba(104, 240, 154, 0.92), rgba(104, 240, 154, 0.92))
+    left center / var(--snap-fill) 6px no-repeat,
     linear-gradient(180deg, rgba(12, 23, 38, 0.98) 0%, rgba(8, 15, 25, 0.99) 100%);
   box-shadow:
     inset 0 0 0 1px rgba(113, 186, 255, 0.18),
@@ -739,9 +725,9 @@ input[type="number"] {
 }
 
 .snap-slider::-moz-range-thumb {
-  width: 10px;
+  width: 8px;
   height: 16px;
-  border-radius: 3px;
+  border-radius: 2px;
   border: 1px solid rgba(219, 255, 230, 0.9);
   background: linear-gradient(180deg, #baf8cf 0%, #61db8f 100%);
   box-shadow: 0 0 10px rgba(80, 237, 127, 0.3);
@@ -774,15 +760,42 @@ input[type="number"] {
 }
 
 .snap-slider::-moz-range-progress {
-  height: 10px;
+  height: 6px;
   border-radius: 4px;
-  background:
-    repeating-linear-gradient(
-      90deg,
-      rgba(28, 95, 62, 0.84) 0 var(--snap-cell),
-      transparent var(--snap-cell) calc(var(--snap-cell) + var(--snap-gap))
-    );
+  background: rgba(104, 240, 154, 0.92);
   width: 100%;
+}
+
+.snap-slider-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.snap-tick-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 7;
+}
+
+.snap-tick {
+  position: absolute;
+  top: 50%;
+  width: 3px;
+  height: 10px;
+  border-radius: 1px;
+  transform: translate(-50%, -50%);
+  border: none;
+  background: rgba(139, 167, 209, 0.22);
+}
+
+.snap-tick.is-filled {
+  background: rgba(80, 237, 127, 0.55);
+}
+
+.snap-tick.is-active {
+  background: rgba(104, 240, 154, 0.95);
+  box-shadow: 0 0 5px rgba(80, 237, 127, 0.6);
 }
 
 .dial-knob {

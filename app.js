@@ -454,10 +454,17 @@ function initSnapPointWidgets(root = document) {
 
     slider.style.setProperty("--snap-slots", String(points.length));
 
+    const normalizedPositions = points.map((point) => {
+      if (max <= min) return 0;
+      return ((point - min) / (max - min)) * 100;
+    });
+
     const snapToNearest = () => {
       const current = Number(slider.value);
       const nearest = points.reduce((best, point) => (Math.abs(point - current) < Math.abs(best - current) ? point : best), points[0]);
+      const nearestIndex = points.findIndex((point) => point === nearest);
       if (nearest !== current) slider.value = String(nearest);
+      setSnapVisualState(slider, nearestIndex, points.length, normalizedPositions);
     };
 
     slider.addEventListener("input", snapToNearest);
@@ -489,6 +496,7 @@ function initGeneratorWidgets(root = document) {
     const syncFromSelect = () => {
       const optionIndex = Math.max(0, options.findIndex((option) => option.value === select.value));
       slider.value = String(optionIndex);
+      setSnapVisualState(slider, optionIndex, options.length);
       if (readout) readout.textContent = options[optionIndex]?.textContent ?? "";
     };
 
@@ -600,6 +608,65 @@ function initGeneratorWidgets(root = document) {
   return () => {
     syncTasks.forEach((sync) => sync());
   };
+}
+
+function setSnapVisualState(slider, index, total, positions = null) {
+  const safeTotal = Math.max(1, Number(total) || 1);
+  const safeIndex = Math.min(safeTotal - 1, Math.max(0, Number(index) || 0));
+  const resolvedPositions =
+    Array.isArray(positions) && positions.length === safeTotal
+      ? positions
+      : Array.from({ length: safeTotal }, (_, positionIndex) => (safeTotal > 1 ? (positionIndex / (safeTotal - 1)) * 100 : 0));
+  const fill = resolvedPositions[safeIndex] ?? 0;
+  slider.style.setProperty("--snap-slots", String(safeTotal));
+  slider.style.setProperty("--snap-fill", `${fill}%`);
+  renderSnapTicks(slider, safeTotal, safeIndex, resolvedPositions);
+}
+
+function ensureSnapSliderVisualElements(slider) {
+  let wrapper = slider.parentElement;
+  if (!wrapper || !wrapper.classList.contains("snap-slider-wrap")) {
+    wrapper = document.createElement("div");
+    wrapper.className = "snap-slider-wrap";
+    slider.parentElement?.insertBefore(wrapper, slider);
+    wrapper.appendChild(slider);
+  }
+
+  let tickLayer = wrapper.querySelector(".snap-tick-layer");
+  if (!tickLayer) {
+    tickLayer = document.createElement("div");
+    tickLayer.className = "snap-tick-layer";
+    tickLayer.setAttribute("aria-hidden", "true");
+    wrapper.appendChild(tickLayer);
+  }
+
+  return tickLayer;
+}
+
+function renderSnapTicks(slider, total, activeIndex, positions = null) {
+  const tickLayer = ensureSnapSliderVisualElements(slider);
+  const expected = Math.max(1, total);
+  const resolvedPositions =
+    Array.isArray(positions) && positions.length === expected
+      ? positions
+      : Array.from({ length: expected }, (_, index) => (expected > 1 ? (index / (expected - 1)) * 100 : 0));
+
+  while (tickLayer.childElementCount > expected) {
+    tickLayer.lastElementChild?.remove();
+  }
+
+  for (let index = tickLayer.childElementCount; index < expected; index += 1) {
+    const tick = document.createElement("span");
+    tick.className = "snap-tick";
+    tickLayer.appendChild(tick);
+  }
+
+  [...tickLayer.children].forEach((tick, index) => {
+    const percent = resolvedPositions[index] ?? 0;
+    tick.style.left = `calc(${percent / 100} * (100% - 8px) + 4px)`;
+    tick.classList.toggle("is-filled", index <= activeIndex);
+    tick.classList.toggle("is-active", index === activeIndex);
+  });
 }
 
 function initSoundWidgets(root = document) {
