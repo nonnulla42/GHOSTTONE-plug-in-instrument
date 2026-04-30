@@ -138,11 +138,25 @@ h2 {
   box-shadow: var(--shadow-soft);
 }
 
+.brand-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .progression-brand h1 {
   font-size: clamp(1.5rem, 2.15vw, 2.4rem);
   line-height: 0.95;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.brand-logo {
+  width: clamp(500px, 3.1vw, 46px);
+  height: auto;
+  flex: 0 0 auto;
+  transform: translateX(805px) translateY(-4px) scale(1.5);
 }
 
 .progression-header .section-label {
@@ -333,6 +347,14 @@ input[type="number"] {
   color: #0b281d;
   background: linear-gradient(180deg, rgba(135, 248, 177, 0.94) 0%, rgba(85, 193, 123, 0.98) 100%);
   box-shadow: 0 0 14px rgba(104, 240, 154, 0.22);
+}
+
+.generator-segment[data-generator-mode="infinite"].active,
+.generator-segment[data-generator-mode="infinitePhrase"].active {
+  border-color: rgba(163, 124, 255, 0.62);
+  color: #f5edff;
+  background: linear-gradient(180deg, rgba(145, 98, 255, 0.94) 0%, rgba(103, 66, 196, 0.98) 100%);
+  box-shadow: 0 0 14px rgba(151, 112, 255, 0.28);
 }
 
 .workspace {
