@@ -23,6 +23,6 @@ test("preset patches include identity controls", () => {
   assert.equal(patch.name, "Dreamy Pad");
   assert.equal(patch.mode, "pad");
   assert.equal(patch.sound, "pad");
-  assert.equal(patch.chords.length, 4);
+  assert.equal(patch.chords.length, 8);
   assert.equal(typeof patch.seed, "number");
 });

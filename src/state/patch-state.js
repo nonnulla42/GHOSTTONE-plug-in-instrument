@@ -1,4 +1,6 @@
 export const PATCH_STATE_VERSION = 1;
+const MAX_BARS = 8;
+const MAX_CHORD_SLOTS = MAX_BARS * 2;
 
 export const DEFAULT_PATCH = Object.freeze({
   name: "Dreamy Pad",
@@ -11,12 +13,20 @@ export const DEFAULT_PATCH = Object.freeze({
     barState(),
     barState(),
     barState(),
+    barState(),
+    barState(),
+    barState(),
+    barState(),
   ]),
   chords: Object.freeze([
     chordValue(0, 0, "Am9"),
     chordValue(1, 0, "Fmaj7"),
     chordValue(2, 0, "Cadd9"),
     chordValue(3, 0, "Gsus4"),
+    chordValue(4, 0, "Am9"),
+    chordValue(5, 0, "Fmaj7"),
+    chordValue(6, 0, "Cadd9"),
+    chordValue(7, 0, "Gsus4"),
   ]),
   core: Object.freeze({
     generatorMode: "classic",
@@ -75,14 +85,17 @@ export function createPatchState({ activeCompareSlot = "A", slots = {} } = {}) {
 }
 
 export function createPatchFromPreset(preset) {
+  const sourceChords = (preset?.chords || DEFAULT_PATCH.chords.map((chord) => chord.value)).slice();
+  const filledChords = Array.from({ length: MAX_BARS }, (_, index) => sourceChords[index] || sourceChords[index % sourceChords.length] || "C");
+
   return normalizePatch({
     name: preset?.name || DEFAULT_PATCH.name,
     seed: preset?.seed ?? DEFAULT_PATCH.seed,
     bpm: preset?.bpm ?? DEFAULT_PATCH.bpm,
     mode: preset?.mode || DEFAULT_PATCH.mode,
     sound: preset?.sound || DEFAULT_PATCH.sound,
-    barStates: createDefaultBarStates(Math.max(4, preset?.chords?.length || 4)),
-    chords: (preset?.chords || DEFAULT_PATCH.chords.map((chord) => chord.value)).map((value, index) => chordValue(index, 0, value)),
+    barStates: createDefaultBarStates(MAX_BARS),
+    chords: filledChords.map((value, index) => chordValue(index, 0, value)),
     core: { ...DEFAULT_PATCH.core, ...preset?.core },
     soundControls: { ...DEFAULT_PATCH.soundControls, ...preset?.soundControls },
   });
@@ -297,7 +310,7 @@ function normalizeSoundControls(soundControls = {}) {
 
 function normalizeBarStates(barStates = DEFAULT_PATCH.barStates) {
   const source = Array.isArray(barStates) && barStates.length ? barStates : DEFAULT_PATCH.barStates;
-  return source.slice(0, 16).map((bar) => ({
+  return source.slice(0, MAX_BARS).map((bar) => ({
     split: Boolean(bar.split),
     slots: [0, 1].map((index) => ({
       voicingSeed: normalizeInt(bar.slots?.[index]?.voicingSeed, 0, 0),
@@ -308,7 +321,7 @@ function normalizeBarStates(barStates = DEFAULT_PATCH.barStates) {
 
 function normalizeChords(chords = DEFAULT_PATCH.chords) {
   const source = Array.isArray(chords) && chords.length ? chords : DEFAULT_PATCH.chords;
-  return source.slice(0, 32).map((chord, index) => ({
+  return source.slice(0, MAX_CHORD_SLOTS).map((chord, index) => ({
     bar: normalizeInt(chord.bar, index, 0),
     slot: normalizeInt(chord.slot, 0, 0),
     value: String(chord.value || "C"),

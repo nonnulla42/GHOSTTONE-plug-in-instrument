@@ -138,6 +138,6 @@ test("default offline render range follows selected time signature", () => {
   });
 
   assert.equal(plan.startBeat, 0);
-  assert.equal(plan.endBeat, 20);
-  assert.equal(plan.durationBeats, 20);
+  assert.equal(plan.endBeat, 40);
+  assert.equal(plan.durationBeats, 40);
 });

@@ -93,8 +93,9 @@ test("patch conversion feeds core, progression, and sound adapters", () => {
   assert.equal(patchToCoreSettings(patch).harmonicDistanceTarget, 1);
   assert.equal(patchToCoreSettings(patch).mode, "pad");
   assert.equal(patchToSoundSettings(patch).space, 0.22);
+  assert.equal(patchToProgression(patch).length, 8);
   assert.deepEqual(
-    patchToProgression(patch).map((bar) => bar.slots[0].chord),
+    patchToProgression(patch).slice(0, 4).map((bar) => bar.slots[0].chord),
     ["Am9", "Fmaj7", "Cadd9", "Gsus4"],
   );
 });

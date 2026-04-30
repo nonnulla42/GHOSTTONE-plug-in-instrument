@@ -8,61 +8,16 @@
   </head>
   <body>
     <main class="app-shell">
-      <section class="topbar" aria-label="GhostTone header">
-        <div>
-          <p class="eyebrow">Chord-aware microtonal companion</p>
-          <h1>GhostTone</h1>
-        </div>
-        <div class="transport">
-          <label class="preset-control">
-            <span>Preset</span>
-            <select id="presetSelect">
-              <option value="dreamy-pad">Dreamy Pad</option>
-              <option value="warm-bed">Warm Bed</option>
-              <option value="nocturne-current">Nocturne Current</option>
-              <option value="broken-arp">Broken Arp</option>
-              <option value="local-weave">Local Weave</option>
-              <option value="open-canopy">Open Canopy</option>
-              <option value="tight-orbit">Tight Orbit</option>
-              <option value="wide-orbit">Wide Orbit</option>
-            </select>
-          </label>
-          <div class="compare-group" role="group" aria-label="Compare slots">
-            <button class="compare-button active" data-compare-slot="A" type="button">A</button>
-            <button class="compare-button" data-compare-slot="B" type="button">B</button>
-          </div>
-          <div class="seed-readout">
-            <span>Seed</span>
-            <input type="number" id="seedValue" min="1" max="999999" step="1" value="0" />
-          </div>
-          <button id="exportPatchButton" class="secondary-button" type="button">Export Patch</button>
-          <button id="importPatchButton" class="secondary-button" type="button">Import Patch</button>
-          <input id="importPatchFile" type="file" accept="application/json,.json" hidden />
-          <label class="bpm-control">
-            <span>BPM</span>
-            <input id="bpm" type="number" min="40" max="180" value="92" />
-          </label>
-          <label class="preset-control">
-            <span>Time Signature</span>
-            <select id="timeSignature">
-              <option value="3/4">3/4</option>
-              <option value="4/4" selected>4/4</option>
-              <option value="5/4">5/4</option>
-              <option value="7/4">7/4</option>
-            </select>
-          </label>
-          <button id="playButton" class="primary-button" type="button">Play</button>
-          <button id="generateButton" class="icon-button" type="button" aria-label="Generate new pattern" title="Generate new pattern">R</button>
-          <button id="exportButton" class="secondary-button" type="button">Export MIDI</button>
-          <button id="exportInfiniteButton" class="secondary-button" type="button">Export Infinite (16 bars)</button>
-          <button id="exportWavButton" class="secondary-button" type="button">Export WAV</button>
-        </div>
-      </section>
-
       <section class="progression-band" aria-label="Chord progression">
-        <div class="section-label">
-          <span>Progression</span>
-          <small>Try: Am9, Fmaj7, Cadd9, Gsus4</small>
+        <div class="progression-header">
+          <div class="progression-brand">
+            <p class="eyebrow">Chord-aware microtonal companion</p>
+            <h1>GhostTone</h1>
+          </div>
+          <div class="section-label">
+            <span>Progression</span>
+            <small>Up to 8 chords, each splittable</small>
+          </div>
         </div>
         <div class="chord-row">
           <article class="bar-card" data-bar="0">
@@ -129,263 +84,367 @@
               <button class="mini-button arp-button" data-bar="3" data-slot="1" type="button">Arp</button>
             </div>
           </article>
+          <article class="bar-card" data-bar="4">
+            <div class="bar-header">
+              <span>Bar 5</span>
+              <button class="mini-button split-button" data-bar="4" type="button">Split</button>
+            </div>
+            <div class="slot-row" data-bar="4" data-slot="0">
+              <input class="chord-input" data-bar="4" data-slot="0" value="Am9" autocomplete="off" spellcheck="false" />
+              <button class="mini-button voice-button" data-bar="4" data-slot="0" type="button">Voice</button>
+              <button class="mini-button arp-button" data-bar="4" data-slot="0" type="button">Arp</button>
+            </div>
+            <div class="slot-row variation-slot" data-bar="4" data-slot="1" hidden>
+              <input class="chord-input" data-bar="4" data-slot="1" value="Am7" autocomplete="off" spellcheck="false" />
+              <button class="mini-button voice-button" data-bar="4" data-slot="1" type="button">Voice</button>
+              <button class="mini-button arp-button" data-bar="4" data-slot="1" type="button">Arp</button>
+            </div>
+          </article>
+          <article class="bar-card" data-bar="5">
+            <div class="bar-header">
+              <span>Bar 6</span>
+              <button class="mini-button split-button" data-bar="5" type="button">Split</button>
+            </div>
+            <div class="slot-row" data-bar="5" data-slot="0">
+              <input class="chord-input" data-bar="5" data-slot="0" value="Fmaj7" autocomplete="off" spellcheck="false" />
+              <button class="mini-button voice-button" data-bar="5" data-slot="0" type="button">Voice</button>
+              <button class="mini-button arp-button" data-bar="5" data-slot="0" type="button">Arp</button>
+            </div>
+            <div class="slot-row variation-slot" data-bar="5" data-slot="1" hidden>
+              <input class="chord-input" data-bar="5" data-slot="1" value="F6" autocomplete="off" spellcheck="false" />
+              <button class="mini-button voice-button" data-bar="5" data-slot="1" type="button">Voice</button>
+              <button class="mini-button arp-button" data-bar="5" data-slot="1" type="button">Arp</button>
+            </div>
+          </article>
+          <article class="bar-card" data-bar="6">
+            <div class="bar-header">
+              <span>Bar 7</span>
+              <button class="mini-button split-button" data-bar="6" type="button">Split</button>
+            </div>
+            <div class="slot-row" data-bar="6" data-slot="0">
+              <input class="chord-input" data-bar="6" data-slot="0" value="Cadd9" autocomplete="off" spellcheck="false" />
+              <button class="mini-button voice-button" data-bar="6" data-slot="0" type="button">Voice</button>
+              <button class="mini-button arp-button" data-bar="6" data-slot="0" type="button">Arp</button>
+            </div>
+            <div class="slot-row variation-slot" data-bar="6" data-slot="1" hidden>
+              <input class="chord-input" data-bar="6" data-slot="1" value="Cmaj7" autocomplete="off" spellcheck="false" />
+              <button class="mini-button voice-button" data-bar="6" data-slot="1" type="button">Voice</button>
+              <button class="mini-button arp-button" data-bar="6" data-slot="1" type="button">Arp</button>
+            </div>
+          </article>
+          <article class="bar-card" data-bar="7">
+            <div class="bar-header">
+              <span>Bar 8</span>
+              <button class="mini-button split-button" data-bar="7" type="button">Split</button>
+            </div>
+            <div class="slot-row" data-bar="7" data-slot="0">
+              <input class="chord-input" data-bar="7" data-slot="0" value="Gsus4" autocomplete="off" spellcheck="false" />
+              <button class="mini-button voice-button" data-bar="7" data-slot="0" type="button">Voice</button>
+              <button class="mini-button arp-button" data-bar="7" data-slot="0" type="button">Arp</button>
+            </div>
+            <div class="slot-row variation-slot" data-bar="7" data-slot="1" hidden>
+              <input class="chord-input" data-bar="7" data-slot="1" value="G7" autocomplete="off" spellcheck="false" />
+              <button class="mini-button voice-button" data-bar="7" data-slot="1" type="button">Voice</button>
+              <button class="mini-button arp-button" data-bar="7" data-slot="1" type="button">Arp</button>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="control-strip" aria-label="Generator controls">
+        <div class="panel-block">
+          <div class="section-label">
+            <span>Generator</span>
+          </div>
+          <div class="segmented" role="group" aria-label="Generator mode">
+            <button class="generator-segment active" data-generator-mode="classic" type="button">Classic</button>
+            <button class="generator-segment" data-generator-mode="roleBased" type="button">Role-based</button>
+            <button class="generator-segment" data-generator-mode="infinite" type="button">Infinite</button>
+            <button class="generator-segment" data-generator-mode="infinitePhrase" type="button">Infinite Phrase</button>
+          </div>
+          <div class="segmented two-up" role="group" aria-label="Motion mode">
+            <button class="segment active" data-mode="pad" type="button">Pad</button>
+            <button class="segment" data-mode="arp" type="button">Arp</button>
+          </div>
+          <label class="slider-row compact">
+            <span>Harmonic Motion</span>
+            <strong id="harmonicMotionValue">30</strong>
+            <input id="harmonicMotion" type="range" min="0" max="100" step="1" value="30" />
+          </label>
+          <label class="select-row">
+            <span>Local Scale</span>
+            <select id="localScaleType">
+              <option value="chromatic" selected>Chromatic</option>
+              <option value="major">Major</option>
+              <option value="minor">Minor</option>
+              <option value="dorian">Dorian</option>
+              <option value="mixolydian">Mixolydian</option>
+              <option value="phrygian">Phrygian</option>
+              <option value="harmonicMinor">Harmonic Minor</option>
+            </select>
+          </label>
+          <label class="select-row">
+            <span>Target Degree</span>
+            <select id="localTargetDegree">
+              <option value="1" selected>I / 1</option>
+              <option value="2">II / 2</option>
+              <option value="3">III / 3</option>
+              <option value="4">IV / 4</option>
+              <option value="5">V / 5</option>
+              <option value="6">VI / 6</option>
+              <option value="7">VII / 7</option>
+            </select>
+          </label>
+          <label class="toggle-row">
+            <input id="localDegreeFalloff" type="checkbox" checked />
+            <span>Degree Falloff</span>
+          </label>
+          <label class="select-row">
+            <span>Global Root</span>
+            <select id="globalRoot">
+              <option value="none" selected>Follow chord</option>
+              <option value="0">C</option>
+              <option value="1">C# / Db</option>
+              <option value="2">D</option>
+              <option value="3">D# / Eb</option>
+              <option value="4">E</option>
+              <option value="5">F</option>
+              <option value="6">F# / Gb</option>
+              <option value="7">G</option>
+              <option value="8">G# / Ab</option>
+              <option value="9">A</option>
+              <option value="10">A# / Bb</option>
+              <option value="11">B</option>
+            </select>
+          </label>
+          <label class="select-row">
+            <span>Scale</span>
+            <select id="scaleName">
+              <option value="none" selected>None</option>
+              <option value="major">Major</option>
+              <option value="minor">Minor</option>
+              <option value="dorian">Dorian</option>
+              <option value="mixolydian">Mixolydian</option>
+              <option value="phrygian">Phrygian</option>
+              <option value="harmonicMinor">Harmonic Minor</option>
+            </select>
+          </label>
+          <label class="slider-row compact">
+            <span>Scale Influence</span>
+            <strong id="scaleInfluenceValue">30</strong>
+            <input id="scaleInfluence" type="range" min="0" max="100" value="30" />
+          </label>
+          <label class="slider-row compact">
+            <span>Memory</span>
+            <strong id="memoryStrengthValue">50</strong>
+            <input id="memoryStrength" type="range" min="0" max="100" value="50" />
+          </label>
+        </div>
+
+        <div class="panel-block">
+          <div class="section-label">
+            <span>Micro engine</span>
+          </div>
+          <label class="slider-row">
+            <span>Ghost Amount</span>
+            <strong id="ghostValue">48</strong>
+            <input id="ghostAmount" type="range" min="0" max="100" value="48" />
+          </label>
+          <label class="slider-row">
+            <span>Drift</span>
+            <strong id="driftValue">35</strong>
+            <input id="drift" type="range" min="0" max="100" value="35" />
+          </label>
+          <label class="slider-row">
+            <span>Harmony Lock</span>
+            <strong id="lockValue">68</strong>
+            <input id="harmonyLock" type="range" min="0" max="100" value="68" />
+          </label>
+          <label class="select-row">
+            <span>Color</span>
+            <select id="colorMode">
+              <option value="warm">Warm</option>
+              <option value="dreamy" selected>Dreamy</option>
+              <option value="dark">Dark</option>
+              <option value="alien">Alien</option>
+            </select>
+          </label>
+          <label class="toggle-row">
+            <input id="stayMusical" type="checkbox" checked />
+            <span>Stay musical</span>
+          </label>
+          <label class="toggle-row">
+            <input id="ghostEnabled" type="checkbox" checked />
+            <span>Ghost preview</span>
+          </label>
+        </div>
+
+        <div class="panel-block">
+          <div class="section-label">
+            <span>Voicing</span>
+          </div>
+          <label class="select-row">
+            <span>Style</span>
+            <select id="voicingStyle">
+              <option value="close">Close</option>
+              <option value="open" selected>Open</option>
+              <option value="spread">Spread</option>
+              <option value="smooth">Smooth</option>
+            </select>
+          </label>
+          <label class="slider-row compact">
+            <span>Variation</span>
+            <strong id="voicingVariationValue">35</strong>
+            <input id="voicingVariation" type="range" min="0" max="100" value="35" />
+          </label>
+          <label class="slider-row compact">
+            <span>Continuity</span>
+            <strong id="voicingContinuityValue">65</strong>
+            <input id="voicingContinuity" type="range" min="0" max="100" value="65" />
+          </label>
+          <label class="slider-row compact">
+            <span>Register</span>
+            <strong id="registerCenterValue">C4</strong>
+            <input id="registerCenter" type="range" min="48" max="72" step="1" value="60" />
+          </label>
+          <div class="section-label">
+            <span>Arp</span>
+          </div>
+          <label class="select-row">
+            <span>Direction</span>
+            <select id="arpDirection">
+              <option value="up" selected>Up</option>
+              <option value="down">Down</option>
+              <option value="updown">Up/Down</option>
+              <option value="insideout">Inside-Out</option>
+              <option value="outsidein">Outside-In</option>
+              <option value="bounce">Bounce</option>
+              <option value="free">Free</option>
+            </select>
+          </label>
+          <label class="select-row">
+            <span>Feel</span>
+            <select id="arpFeel">
+              <option value="even" selected>Even</option>
+              <option value="flowing">Flowing</option>
+              <option value="broken">Broken</option>
+              <option value="syncopated">Syncopated</option>
+              <option value="pulsing">Pulsing</option>
+            </select>
+          </label>
+          <label class="slider-row compact">
+            <span>Density</span>
+            <strong id="arpDensityValue">50</strong>
+            <input id="arpDensity" type="range" min="0" max="100" value="50" />
+          </label>
+          <label class="slider-row compact">
+            <span>Continuity</span>
+            <strong id="arpContinuityValue">60</strong>
+            <input id="arpContinuity" type="range" min="0" max="100" value="60" />
+          </label>
+        </div>
+
+        <div class="panel-block">
+          <div class="section-label">
+            <span>Transport</span>
+          </div>
+          <div class="transport">
+            <label class="preset-control">
+              <span>Preset</span>
+              <select id="presetSelect">
+                <option value="dreamy-pad">Dreamy Pad</option>
+                <option value="warm-bed">Warm Bed</option>
+                <option value="nocturne-current">Nocturne Current</option>
+                <option value="broken-arp">Broken Arp</option>
+                <option value="local-weave">Local Weave</option>
+                <option value="open-canopy">Open Canopy</option>
+                <option value="tight-orbit">Tight Orbit</option>
+                <option value="wide-orbit">Wide Orbit</option>
+              </select>
+            </label>
+            <div class="compare-group" role="group" aria-label="Compare slots">
+              <button class="compare-button active" data-compare-slot="A" type="button">A</button>
+              <button class="compare-button" data-compare-slot="B" type="button">B</button>
+            </div>
+            <div class="seed-readout">
+              <span>Seed</span>
+              <input type="number" id="seedValue" min="1" max="999999" step="1" value="0" />
+            </div>
+            <button id="exportPatchButton" class="secondary-button" type="button">Export Patch</button>
+            <button id="importPatchButton" class="secondary-button" type="button">Import Patch</button>
+            <input id="importPatchFile" type="file" accept="application/json,.json" hidden />
+            <label class="bpm-control">
+              <span>BPM</span>
+              <input id="bpm" type="number" min="40" max="180" value="92" />
+            </label>
+            <label class="preset-control">
+              <span>Time Signature</span>
+              <select id="timeSignature">
+                <option value="3/4">3/4</option>
+                <option value="4/4" selected>4/4</option>
+                <option value="5/4">5/4</option>
+                <option value="7/4">7/4</option>
+              </select>
+            </label>
+            <button id="playButton" class="primary-button" type="button">Play</button>
+            <button id="generateButton" class="icon-button" type="button" aria-label="Generate new pattern" title="Generate new pattern">R</button>
+            <button id="exportButton" class="secondary-button" type="button">Export MIDI</button>
+            <button id="exportInfiniteButton" class="secondary-button" type="button">Export Infinite (16 bars)</button>
+            <button id="exportWavButton" class="secondary-button" type="button">Export WAV</button>
+          </div>
+        </div>
+
+        <div class="panel-block">
+          <div class="section-label">
+            <span>Sound</span>
+          </div>
+          <div class="segmented two-up" role="group" aria-label="Sound preset">
+            <button class="sound-segment active" data-sound="pad" type="button">Pad</button>
+            <button class="sound-segment" data-sound="pluck" type="button">Pluck</button>
+          </div>
+          <label class="select-row">
+            <span>Wave</span>
+            <select id="waveform">
+              <option value="sine">Sine</option>
+              <option value="triangle" selected>Triangle</option>
+              <option value="sawtooth">Saw</option>
+              <option value="square">Square</option>
+            </select>
+          </label>
+          <label class="slider-row compact">
+            <span>Cutoff</span>
+            <strong id="cutoffValue">1800</strong>
+            <input id="cutoff" type="range" min="400" max="6400" value="1800" />
+          </label>
+          <label class="slider-row compact">
+            <span>Attack</span>
+            <strong id="attackValue">0.28</strong>
+            <input id="attack" type="range" min="0.01" max="1.2" step="0.01" value="0.28" />
+          </label>
+          <label class="slider-row compact">
+            <span>Release</span>
+            <strong id="releaseValue">0.70</strong>
+            <input id="release" type="range" min="0.05" max="2.5" step="0.01" value="0.70" />
+          </label>
+          <label class="slider-row compact">
+            <span>Space</span>
+            <strong id="spaceValue">28</strong>
+            <input id="space" type="range" min="0" max="100" value="28" />
+          </label>
+          <label class="slider-row compact">
+            <span>Reverb</span>
+            <strong id="reverbMixValue">18</strong>
+            <input id="reverbMix" type="range" min="0" max="100" value="18" />
+          </label>
+          <label class="slider-row compact">
+            <span>Delay</span>
+            <strong id="delayMixValue">0</strong>
+            <input id="delayMix" type="range" min="0" max="100" value="0" />
+          </label>
         </div>
       </section>
 
       <section class="workspace">
-        <aside class="control-panel" aria-label="Generator controls">
-          <div class="panel-block">
-            <div class="section-label">
-              <span>Generator</span>
-            </div>
-            <div class="segmented" role="group" aria-label="Generator mode">
-              <button class="generator-segment active" data-generator-mode="classic" type="button">Classic</button>
-              <button class="generator-segment" data-generator-mode="roleBased" type="button">Role-based</button>
-              <button class="generator-segment" data-generator-mode="infinite" type="button">Infinite</button>
-              <button class="generator-segment" data-generator-mode="infinitePhrase" type="button">Infinite Phrase</button>
-            </div>
-            <label class="slider-row compact">
-              <span>Harmonic Motion</span>
-              <strong id="harmonicMotionValue">30</strong>
-              <input id="harmonicMotion" type="range" min="0" max="100" step="1" value="30" />
-            </label>
-            <label class="select-row">
-              <span>Local Scale</span>
-              <select id="localScaleType">
-                <option value="chromatic" selected>Chromatic</option>
-                <option value="major">Major</option>
-                <option value="minor">Minor</option>
-                <option value="dorian">Dorian</option>
-                <option value="mixolydian">Mixolydian</option>
-                <option value="phrygian">Phrygian</option>
-                <option value="harmonicMinor">Harmonic Minor</option>
-              </select>
-            </label>
-            <label class="select-row">
-              <span>Target Degree</span>
-              <select id="localTargetDegree">
-                <option value="1" selected>I / 1</option>
-                <option value="2">II / 2</option>
-                <option value="3">III / 3</option>
-                <option value="4">IV / 4</option>
-                <option value="5">V / 5</option>
-                <option value="6">VI / 6</option>
-                <option value="7">VII / 7</option>
-              </select>
-            </label>
-            <label class="toggle-row">
-              <input id="localDegreeFalloff" type="checkbox" checked />
-              <span>Degree Falloff</span>
-            </label>
-            <label class="select-row">
-              <span>Global Root</span>
-              <select id="globalRoot">
-                <option value="none" selected>Follow chord</option>
-                <option value="0">C</option>
-                <option value="1">C# / Db</option>
-                <option value="2">D</option>
-                <option value="3">D# / Eb</option>
-                <option value="4">E</option>
-                <option value="5">F</option>
-                <option value="6">F# / Gb</option>
-                <option value="7">G</option>
-                <option value="8">G# / Ab</option>
-                <option value="9">A</option>
-                <option value="10">A# / Bb</option>
-                <option value="11">B</option>
-              </select>
-            </label>
-            <label class="select-row">
-              <span>Scale</span>
-              <select id="scaleName">
-                <option value="none" selected>None</option>
-                <option value="major">Major</option>
-                <option value="minor">Minor</option>
-                <option value="dorian">Dorian</option>
-                <option value="mixolydian">Mixolydian</option>
-                <option value="phrygian">Phrygian</option>
-                <option value="harmonicMinor">Harmonic Minor</option>
-              </select>
-            </label>
-            <label class="slider-row compact">
-              <span>Scale Influence</span>
-              <strong id="scaleInfluenceValue">30</strong>
-              <input id="scaleInfluence" type="range" min="0" max="100" value="30" />
-            </label>
-            <label class="slider-row compact">
-              <span>Memory</span>
-              <strong id="memoryStrengthValue">50</strong>
-              <input id="memoryStrength" type="range" min="0" max="100" value="50" />
-            </label>
-          </div>
-
-          <div class="panel-block">
-            <div class="section-label">
-              <span>Motion</span>
-            </div>
-            <div class="segmented" role="group" aria-label="Motion mode">
-              <button class="segment active" data-mode="pad" type="button">Pad</button>
-              <button class="segment" data-mode="arp" type="button">Arp</button>
-              <!-- evolve: deprecated, code kept in ghosttone-core.js -->
-            </div>
-          </div>
-
-          <div class="panel-block">
-            <div class="section-label">
-              <span>Micro engine</span>
-            </div>
-            <label class="slider-row">
-              <span>Ghost Amount</span>
-              <strong id="ghostValue">48</strong>
-              <input id="ghostAmount" type="range" min="0" max="100" value="48" />
-            </label>
-            <label class="slider-row">
-              <span>Drift</span>
-              <strong id="driftValue">35</strong>
-              <input id="drift" type="range" min="0" max="100" value="35" />
-            </label>
-            <label class="slider-row">
-              <span>Harmony Lock</span>
-              <strong id="lockValue">68</strong>
-              <input id="harmonyLock" type="range" min="0" max="100" value="68" />
-            </label>
-            <label class="select-row">
-              <span>Color</span>
-              <select id="colorMode">
-                <option value="warm">Warm</option>
-                <option value="dreamy" selected>Dreamy</option>
-                <option value="dark">Dark</option>
-                <option value="alien">Alien</option>
-              </select>
-            </label>
-            <label class="toggle-row">
-              <input id="stayMusical" type="checkbox" checked />
-              <span>Stay musical</span>
-            </label>
-            <label class="toggle-row">
-              <input id="ghostEnabled" type="checkbox" checked />
-              <span>Ghost preview</span>
-            </label>
-          </div>
-
-          <div class="panel-block">
-            <div class="section-label">
-              <span>Voicing</span>
-            </div>
-            <label class="select-row">
-              <span>Style</span>
-              <select id="voicingStyle">
-                <option value="close">Close</option>
-                <option value="open" selected>Open</option>
-                <option value="spread">Spread</option>
-                <option value="smooth">Smooth</option>
-              </select>
-            </label>
-            <label class="slider-row compact">
-              <span>Variation</span>
-              <strong id="voicingVariationValue">35</strong>
-              <input id="voicingVariation" type="range" min="0" max="100" value="35" />
-            </label>
-            <label class="slider-row compact">
-              <span>Continuity</span>
-              <strong id="voicingContinuityValue">65</strong>
-              <input id="voicingContinuity" type="range" min="0" max="100" value="65" />
-            </label>
-            <label class="slider-row compact">
-              <span>Register</span>
-              <strong id="registerCenterValue">C4</strong>
-              <input id="registerCenter" type="range" min="48" max="72" step="1" value="60" />
-            </label>
-          </div>
-
-          <div class="panel-block">
-            <div class="section-label">
-              <span>Arp</span>
-            </div>
-            <label class="select-row">
-              <span>Direction</span>
-              <select id="arpDirection">
-                <option value="up" selected>Up</option>
-                <option value="down">Down</option>
-                <option value="updown">Up/Down</option>
-                <option value="insideout">Inside-Out</option>
-                <option value="outsidein">Outside-In</option>
-                <option value="bounce">Bounce</option>
-                <option value="free">Free</option>
-              </select>
-            </label>
-            <label class="select-row">
-              <span>Feel</span>
-              <select id="arpFeel">
-                <option value="even" selected>Even</option>
-                <option value="flowing">Flowing</option>
-                <option value="broken">Broken</option>
-                <option value="syncopated">Syncopated</option>
-                <option value="pulsing">Pulsing</option>
-              </select>
-            </label>
-            <label class="slider-row compact">
-              <span>Density</span>
-              <strong id="arpDensityValue">50</strong>
-              <input id="arpDensity" type="range" min="0" max="100" value="50" />
-            </label>
-            <label class="slider-row compact">
-              <span>Continuity</span>
-              <strong id="arpContinuityValue">60</strong>
-              <input id="arpContinuity" type="range" min="0" max="100" value="60" />
-            </label>
-          </div>
-
-          <div class="panel-block">
-            <div class="section-label">
-              <span>Sound</span>
-            </div>
-            <div class="segmented" role="group" aria-label="Sound preset">
-              <button class="sound-segment active" data-sound="pad" type="button">Pad</button>
-              <button class="sound-segment" data-sound="pluck" type="button">Pluck</button>
-            </div>
-            <label class="select-row">
-              <span>Wave</span>
-              <select id="waveform">
-                <option value="sine">Sine</option>
-                <option value="triangle" selected>Triangle</option>
-                <option value="sawtooth">Saw</option>
-                <option value="square">Square</option>
-              </select>
-            </label>
-            <label class="slider-row compact">
-              <span>Cutoff</span>
-              <strong id="cutoffValue">1800</strong>
-              <input id="cutoff" type="range" min="400" max="6400" value="1800" />
-            </label>
-            <label class="slider-row compact">
-              <span>Attack</span>
-              <strong id="attackValue">0.28</strong>
-              <input id="attack" type="range" min="0.01" max="1.2" step="0.01" value="0.28" />
-            </label>
-            <label class="slider-row compact">
-              <span>Release</span>
-              <strong id="releaseValue">0.70</strong>
-              <input id="release" type="range" min="0.05" max="2.5" step="0.01" value="0.70" />
-            </label>
-            <label class="slider-row compact">
-              <span>Space</span>
-              <strong id="spaceValue">28</strong>
-              <input id="space" type="range" min="0" max="100" value="28" />
-            </label>
-            <label class="slider-row compact">
-              <span>Reverb</span>
-              <strong id="reverbMixValue">18</strong>
-              <input id="reverbMix" type="range" min="0" max="100" value="18" />
-            </label>
-            <label class="slider-row compact">
-              <span>Delay</span>
-              <strong id="delayMixValue">0</strong>
-              <input id="delayMix" type="range" min="0" max="100" value="0" />
-            </label>
-          </div>
-        </aside>
-
         <section class="stage" aria-label="GhostTone visualizer">
           <div class="stage-toolbar">
             <div>
