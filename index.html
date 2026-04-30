@@ -156,24 +156,31 @@
           <div class="section-label">
             <span>Generator</span>
           </div>
-          <div class="segmented" role="group" aria-label="Generator mode">
-            <button class="generator-segment active" data-generator-mode="classic" type="button">Classic</button>
-            <button class="generator-segment" data-generator-mode="roleBased" type="button">Role-based</button>
-            <button class="generator-segment" data-generator-mode="infinite" type="button">Infinite</button>
-            <button class="generator-segment" data-generator-mode="infinitePhrase" type="button">Infinite Phrase</button>
+          <div class="generator-layout">
+            <div class="segmented generator-mode-stack" role="group" aria-label="Generator mode">
+              <button class="generator-segment active" data-generator-mode="classic" type="button">Classic</button>
+              <button class="generator-segment" data-generator-mode="roleBased" type="button">Role-based</button>
+              <button class="generator-segment" data-generator-mode="infinite" type="button">Infinite</button>
+              <button class="generator-segment" data-generator-mode="infinitePhrase" type="button">Infinite Phrase</button>
+            </div>
+            <div class="generator-motion-knob">
+              <div class="knob-row knob-row-centered" data-knob-range="harmonicMotion">
+                <button class="dial-knob" type="button" data-knob-handle aria-label="Harmonic Motion knob">
+                  <span class="dial-knob-value" data-knob-value>30</span>
+                </button>
+                <span class="knob-bottom-label">Harmonic Motion</span>
+                <strong id="harmonicMotionValue" class="visually-hidden">30</strong>
+                <input id="harmonicMotion" class="visually-hidden" type="range" min="0" max="100" step="1" value="30" />
+              </div>
+            </div>
           </div>
-          <div class="segmented two-up" role="group" aria-label="Motion mode">
-            <button class="segment active" data-mode="pad" type="button">Pad</button>
-            <button class="segment" data-mode="arp" type="button">Arp</button>
-          </div>
-          <label class="slider-row compact">
-            <span>Harmonic Motion</span>
-            <strong id="harmonicMotionValue">30</strong>
-            <input id="harmonicMotion" type="range" min="0" max="100" step="1" value="30" />
-          </label>
-          <label class="select-row">
-            <span>Local Scale</span>
-            <select id="localScaleType">
+          <div class="snap-row" data-snap-select="localScaleType">
+            <div class="snap-row-head">
+              <span>Local Scale</span>
+              <strong class="snap-readout" data-snap-value>Chromatic</strong>
+            </div>
+            <input class="snap-slider" type="range" min="0" max="6" step="1" value="0" />
+            <select id="localScaleType" class="visually-hidden">
               <option value="chromatic" selected>Chromatic</option>
               <option value="major">Major</option>
               <option value="minor">Minor</option>
@@ -182,10 +189,14 @@
               <option value="phrygian">Phrygian</option>
               <option value="harmonicMinor">Harmonic Minor</option>
             </select>
-          </label>
-          <label class="select-row">
-            <span>Target Degree</span>
-            <select id="localTargetDegree">
+          </div>
+          <div class="snap-row" data-snap-select="localTargetDegree">
+            <div class="snap-row-head">
+              <span>Target Degree</span>
+              <strong class="snap-readout" data-snap-value>I / 1</strong>
+            </div>
+            <input class="snap-slider" type="range" min="0" max="6" step="1" value="0" />
+            <select id="localTargetDegree" class="visually-hidden">
               <option value="1" selected>I / 1</option>
               <option value="2">II / 2</option>
               <option value="3">III / 3</option>
@@ -194,14 +205,18 @@
               <option value="6">VI / 6</option>
               <option value="7">VII / 7</option>
             </select>
-          </label>
+          </div>
           <label class="toggle-row">
             <input id="localDegreeFalloff" type="checkbox" checked />
             <span>Degree Falloff</span>
           </label>
-          <label class="select-row">
-            <span>Global Root</span>
-            <select id="globalRoot">
+          <div class="snap-row" data-snap-select="globalRoot">
+            <div class="snap-row-head">
+              <span>Global Root</span>
+              <strong class="snap-readout" data-snap-value>Follow chord</strong>
+            </div>
+            <input class="snap-slider" type="range" min="0" max="12" step="1" value="0" />
+            <select id="globalRoot" class="visually-hidden">
               <option value="none" selected>Follow chord</option>
               <option value="0">C</option>
               <option value="1">C# / Db</option>
@@ -216,10 +231,14 @@
               <option value="10">A# / Bb</option>
               <option value="11">B</option>
             </select>
-          </label>
-          <label class="select-row">
-            <span>Scale</span>
-            <select id="scaleName">
+          </div>
+          <div class="snap-row" data-snap-select="scaleName">
+            <div class="snap-row-head">
+              <span>Scale</span>
+              <strong class="snap-readout" data-snap-value>None</strong>
+            </div>
+            <input class="snap-slider" type="range" min="0" max="6" step="1" value="0" />
+            <select id="scaleName" class="visually-hidden">
               <option value="none" selected>None</option>
               <option value="major">Major</option>
               <option value="minor">Minor</option>
@@ -228,17 +247,25 @@
               <option value="phrygian">Phrygian</option>
               <option value="harmonicMinor">Harmonic Minor</option>
             </select>
-          </label>
-          <label class="slider-row compact">
-            <span>Scale Influence</span>
-            <strong id="scaleInfluenceValue">30</strong>
-            <input id="scaleInfluence" type="range" min="0" max="100" value="30" />
-          </label>
-          <label class="slider-row compact">
-            <span>Memory</span>
-            <strong id="memoryStrengthValue">50</strong>
-            <input id="memoryStrength" type="range" min="0" max="100" value="50" />
-          </label>
+          </div>
+          <div class="knob-pair">
+            <div class="knob-row knob-row-centered knob-row-small" data-knob-range="scaleInfluence">
+              <button class="dial-knob" type="button" data-knob-handle aria-label="Scale Influence knob">
+                <span class="dial-knob-value" data-knob-value>30</span>
+              </button>
+              <span class="knob-bottom-label">Scale Influence</span>
+              <strong id="scaleInfluenceValue" class="visually-hidden">30</strong>
+              <input id="scaleInfluence" class="visually-hidden" type="range" min="0" max="100" value="30" />
+            </div>
+            <div class="knob-row knob-row-centered knob-row-small" data-knob-range="memoryStrength">
+              <button class="dial-knob" type="button" data-knob-handle aria-label="Memory knob">
+                <span class="dial-knob-value" data-knob-value>50</span>
+              </button>
+              <span class="knob-bottom-label">Memory</span>
+              <strong id="memoryStrengthValue" class="visually-hidden">50</strong>
+              <input id="memoryStrength" class="visually-hidden" type="range" min="0" max="100" value="50" />
+            </div>
+          </div>
         </div>
 
         <div class="panel-block">
@@ -280,6 +307,10 @@
         </div>
 
         <div class="panel-block">
+          <div class="segmented two-up motion-segmented" role="group" aria-label="Motion mode">
+            <button class="segment active" data-mode="pad" type="button">Pad</button>
+            <button class="segment" data-mode="arp" type="button">Arp</button>
+          </div>
           <div class="section-label">
             <span>Voicing</span>
           </div>
@@ -332,11 +363,22 @@
               <option value="pulsing">Pulsing</option>
             </select>
           </label>
-          <label class="slider-row compact">
-            <span>Density</span>
-            <strong id="arpDensityValue">50</strong>
-            <input id="arpDensity" type="range" min="0" max="100" value="50" />
-          </label>
+          <div class="snap-row" data-snap-steps>
+            <div class="snap-row-head">
+              <span>Density</span>
+              <strong id="arpDensityValue" class="snap-readout">8th</strong>
+            </div>
+            <input
+              id="arpDensity"
+              class="snap-slider"
+              data-snap-points="0,33,66,99"
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value="50"
+            />
+          </div>
           <label class="slider-row compact">
             <span>Continuity</span>
             <strong id="arpContinuityValue">60</strong>
@@ -398,49 +440,74 @@
           <div class="section-label">
             <span>Sound</span>
           </div>
-          <div class="segmented two-up" role="group" aria-label="Sound preset">
-            <button class="sound-segment active" data-sound="pad" type="button">Pad</button>
-            <button class="sound-segment" data-sound="pluck" type="button">Pluck</button>
+          <div class="sound-top">
+            <div class="knob-row knob-row-centered" data-knob-range="cutoff">
+              <button class="dial-knob" type="button" data-knob-handle aria-label="Cutoff knob">
+                <span class="dial-knob-value" data-knob-value>1800</span>
+              </button>
+              <span class="knob-bottom-label">Cutoff</span>
+              <strong id="cutoffValue" class="visually-hidden">1800</strong>
+              <input id="cutoff" class="visually-hidden" type="range" min="400" max="6400" value="1800" />
+            </div>
+            <div class="sound-wave-group">
+              <div class="segmented wave-segmented" data-wave-group role="group" aria-label="Waveform">
+                <button class="wave-segment active" data-wave-value="sine" type="button">Sine</button>
+                <button class="wave-segment" data-wave-value="triangle" type="button">Triangle</button>
+                <button class="wave-segment" data-wave-value="sawtooth" type="button">Saw</button>
+                <button class="wave-segment" data-wave-value="square" type="button">Square</button>
+              </div>
+              <select id="waveform" class="visually-hidden">
+                <option value="sine">Sine</option>
+                <option value="triangle" selected>Triangle</option>
+                <option value="sawtooth">Saw</option>
+                <option value="square">Square</option>
+              </select>
+            </div>
           </div>
-          <label class="select-row">
-            <span>Wave</span>
-            <select id="waveform">
-              <option value="sine">Sine</option>
-              <option value="triangle" selected>Triangle</option>
-              <option value="sawtooth">Saw</option>
-              <option value="square">Square</option>
-            </select>
-          </label>
-          <label class="slider-row compact">
-            <span>Cutoff</span>
-            <strong id="cutoffValue">1800</strong>
-            <input id="cutoff" type="range" min="400" max="6400" value="1800" />
-          </label>
-          <label class="slider-row compact">
-            <span>Attack</span>
-            <strong id="attackValue">0.28</strong>
-            <input id="attack" type="range" min="0.01" max="1.2" step="0.01" value="0.28" />
-          </label>
-          <label class="slider-row compact">
-            <span>Release</span>
-            <strong id="releaseValue">0.70</strong>
-            <input id="release" type="range" min="0.05" max="2.5" step="0.01" value="0.70" />
-          </label>
-          <label class="slider-row compact">
-            <span>Space</span>
-            <strong id="spaceValue">28</strong>
-            <input id="space" type="range" min="0" max="100" value="28" />
-          </label>
-          <label class="slider-row compact">
-            <span>Reverb</span>
-            <strong id="reverbMixValue">18</strong>
-            <input id="reverbMix" type="range" min="0" max="100" value="18" />
-          </label>
-          <label class="slider-row compact">
-            <span>Delay</span>
-            <strong id="delayMixValue">0</strong>
-            <input id="delayMix" type="range" min="0" max="100" value="0" />
-          </label>
+          <div class="knob-pair sound-main-knobs">
+            <div class="knob-row knob-row-centered" data-knob-range="attack">
+              <button class="dial-knob" type="button" data-knob-handle aria-label="Attack knob">
+                <span class="dial-knob-value" data-knob-value>0.28</span>
+              </button>
+              <span class="knob-bottom-label">Attack</span>
+              <strong id="attackValue" class="visually-hidden">0.28</strong>
+              <input id="attack" class="visually-hidden" type="range" min="0.01" max="1.2" step="0.01" value="0.28" />
+            </div>
+            <div class="knob-row knob-row-centered" data-knob-range="release">
+              <button class="dial-knob" type="button" data-knob-handle aria-label="Release knob">
+                <span class="dial-knob-value" data-knob-value>0.70</span>
+              </button>
+              <span class="knob-bottom-label">Release</span>
+              <strong id="releaseValue" class="visually-hidden">0.70</strong>
+              <input id="release" class="visually-hidden" type="range" min="0.05" max="2.5" step="0.01" value="0.70" />
+            </div>
+          </div>
+          <div class="sound-mini-knobs">
+            <div class="knob-row knob-row-centered knob-row-small" data-knob-range="space">
+              <button class="dial-knob" type="button" data-knob-handle aria-label="Space knob">
+                <span class="dial-knob-value" data-knob-value>28</span>
+              </button>
+              <span class="knob-bottom-label">Space</span>
+              <strong id="spaceValue" class="visually-hidden">28</strong>
+              <input id="space" class="visually-hidden" type="range" min="0" max="100" value="28" />
+            </div>
+            <div class="knob-row knob-row-centered knob-row-small" data-knob-range="reverbMix">
+              <button class="dial-knob" type="button" data-knob-handle aria-label="Reverb knob">
+                <span class="dial-knob-value" data-knob-value>18</span>
+              </button>
+              <span class="knob-bottom-label">Reverb</span>
+              <strong id="reverbMixValue" class="visually-hidden">18</strong>
+              <input id="reverbMix" class="visually-hidden" type="range" min="0" max="100" value="18" />
+            </div>
+            <div class="knob-row knob-row-centered knob-row-small" data-knob-range="delayMix">
+              <button class="dial-knob" type="button" data-knob-handle aria-label="Delay knob">
+                <span class="dial-knob-value" data-knob-value>0</span>
+              </button>
+              <span class="knob-bottom-label">Delay</span>
+              <strong id="delayMixValue" class="visually-hidden">0</strong>
+              <input id="delayMix" class="visually-hidden" type="range" min="0" max="100" value="0" />
+            </div>
+          </div>
         </div>
       </section>
 

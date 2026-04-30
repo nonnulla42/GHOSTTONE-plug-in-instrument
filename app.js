@@ -43,6 +43,9 @@ const LIVE_SOUND_UPDATE_MS = 45;
 const els = getElements();
 const audio = new WebAudioAdapter();
 const visualizer = new GridVisualizer(els.gridView);
+const refreshSnapPointWidgets = initSnapPointWidgets();
+const refreshGeneratorWidgets = initGeneratorWidgets();
+const refreshSoundWidgets = initSoundWidgets();
 
 audio.onPatternExtended = (pattern) => {
   state.pattern = pattern;
@@ -62,6 +65,9 @@ function applyActivePatchToUi() {
   const patch = activePatch();
   applyPatch(els, patch);
   refreshProgressionUi(patch.barStates);
+  refreshSnapPointWidgets();
+  refreshGeneratorWidgets();
+  refreshSoundWidgets();
   updateCompareUi(document, state.patchState.activeCompareSlot);
 }
 
@@ -376,10 +382,6 @@ function bindEvents() {
   document.querySelectorAll(".segment").forEach((button) => {
     button.addEventListener("click", () => setMode(button.dataset.mode));
   });
-  document.querySelectorAll(".sound-segment").forEach((button) => {
-    button.addEventListener("click", () => setSound(button.dataset.sound));
-  });
-
   els.splitButtons.forEach((button) => {
     button.addEventListener("click", () => toggleSplit(Number(button.dataset.bar)));
   });
@@ -432,3 +434,206 @@ function bindEvents() {
 
 bindEvents();
 loadCurrentPatch({ restartAudio: false });
+
+function initSnapPointWidgets(root = document) {
+  const syncTasks = [];
+
+  root.querySelectorAll("input[type=\"range\"][data-snap-points]").forEach((slider) => {
+    const parsedPoints = String(slider.dataset.snapPoints || "")
+      .split(",")
+      .map((value) => Number(value.trim()))
+      .filter((value) => Number.isFinite(value));
+
+    if (parsedPoints.length < 2) return;
+
+    const min = Number(slider.min || 0);
+    const max = Number(slider.max || 100);
+    const points = parsedPoints
+      .map((value) => Math.min(max, Math.max(min, value)))
+      .sort((a, b) => a - b);
+
+    slider.style.setProperty("--snap-slots", String(points.length));
+
+    const snapToNearest = () => {
+      const current = Number(slider.value);
+      const nearest = points.reduce((best, point) => (Math.abs(point - current) < Math.abs(best - current) ? point : best), points[0]);
+      if (nearest !== current) slider.value = String(nearest);
+    };
+
+    slider.addEventListener("input", snapToNearest);
+    slider.addEventListener("change", snapToNearest);
+    syncTasks.push(snapToNearest);
+    snapToNearest();
+  });
+
+  return () => {
+    syncTasks.forEach((sync) => sync());
+  };
+}
+
+function initGeneratorWidgets(root = document) {
+  const syncTasks = [];
+
+  root.querySelectorAll("[data-snap-select]").forEach((row) => {
+    const selectId = row.dataset.snapSelect;
+    const select = root.querySelector(`#${selectId}`);
+    const slider = row.querySelector(".snap-slider");
+    const readout = row.querySelector("[data-snap-value]");
+    if (!select || !slider) return;
+
+    const options = [...select.options];
+    slider.min = "0";
+    slider.max = String(Math.max(0, options.length - 1));
+    slider.step = "1";
+
+    const syncFromSelect = () => {
+      const optionIndex = Math.max(0, options.findIndex((option) => option.value === select.value));
+      slider.value = String(optionIndex);
+      if (readout) readout.textContent = options[optionIndex]?.textContent ?? "";
+    };
+
+    const syncFromSlider = (eventType) => {
+      const optionIndex = Number(slider.value);
+      const option = options[optionIndex];
+      if (!option) return;
+      if (select.value !== option.value) {
+        select.value = option.value;
+        select.dispatchEvent(new Event(eventType, { bubbles: true }));
+      }
+      if (readout) readout.textContent = option.textContent ?? "";
+    };
+
+    slider.addEventListener("input", () => syncFromSlider("input"));
+    slider.addEventListener("change", () => syncFromSlider("change"));
+    select.addEventListener("input", syncFromSelect);
+    select.addEventListener("change", syncFromSelect);
+    syncTasks.push(syncFromSelect);
+    syncFromSelect();
+  });
+
+  root.querySelectorAll("[data-knob-range]").forEach((row) => {
+    const rangeId = row.dataset.knobRange;
+    const range = root.querySelector(`#${rangeId}`);
+    const knob = row.querySelector("[data-knob-handle]");
+    const value = row.querySelector("[data-knob-value]");
+    if (!range || !knob || !value) return;
+
+    let dragSession = null;
+    const min = Number(range.min || 0);
+    const max = Number(range.max || 100);
+    const step = Number(range.step || 1);
+
+    const clamp = (raw) => Math.min(max, Math.max(min, raw));
+    const quantize = (raw) => {
+      const normalized = (raw - min) / step;
+      return clamp(min + Math.round(normalized) * step);
+    };
+
+    const setRangeValue = (next, eventType) => {
+      const quantified = quantize(next);
+      if (Number(range.value) === quantified) return;
+      range.value = String(quantified);
+      range.dispatchEvent(new Event(eventType, { bubbles: true }));
+    };
+
+    const resolveDecimals = () => {
+      const stepText = String(range.step || "1");
+      if (!stepText.includes(".")) return 0;
+      return stepText.split(".")[1].length;
+    };
+
+    const renderKnob = () => {
+      const current = Number(range.value);
+      const normalized = max > min ? (current - min) / (max - min) : 0;
+      const angle = -132 + normalized * 264;
+      knob.style.setProperty("--knob-angle", `${angle}deg`);
+      const decimals = resolveDecimals();
+      value.textContent = decimals > 0 ? current.toFixed(decimals) : String(Math.round(current));
+    };
+
+    const onPointerMove = (event) => {
+      if (!dragSession) return;
+      const delta = dragSession.startY - event.clientY;
+      const next = dragSession.startValue + delta * dragSession.unitsPerPixel;
+      setRangeValue(next, "input");
+      renderKnob();
+    };
+
+    const onPointerUp = (event) => {
+      if (!dragSession) return;
+      onPointerMove(event);
+      setRangeValue(Number(range.value), "change");
+      dragSession = null;
+      knob.releasePointerCapture(event.pointerId);
+      knob.classList.remove("is-dragging");
+    };
+
+    knob.addEventListener("pointerdown", (event) => {
+      dragSession = {
+        startY: event.clientY,
+        startValue: Number(range.value),
+        unitsPerPixel: Math.max(step, (max - min) / 160),
+      };
+      knob.setPointerCapture(event.pointerId);
+      knob.classList.add("is-dragging");
+      event.preventDefault();
+    });
+
+    knob.addEventListener("pointermove", onPointerMove);
+    knob.addEventListener("pointerup", onPointerUp);
+    knob.addEventListener("pointercancel", onPointerUp);
+
+    knob.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      const direction = event.deltaY < 0 ? 1 : -1;
+      setRangeValue(Number(range.value) + direction * step, "input");
+      setRangeValue(Number(range.value), "change");
+      renderKnob();
+    });
+
+    range.addEventListener("input", renderKnob);
+    range.addEventListener("change", renderKnob);
+    syncTasks.push(renderKnob);
+    renderKnob();
+  });
+
+  return () => {
+    syncTasks.forEach((sync) => sync());
+  };
+}
+
+function initSoundWidgets(root = document) {
+  const syncTasks = [];
+
+  root.querySelectorAll("[data-wave-group]").forEach((group) => {
+    const select = root.querySelector("#waveform");
+    const buttons = [...group.querySelectorAll("[data-wave-value]")];
+    if (!select || buttons.length === 0) return;
+
+    const syncFromSelect = () => {
+      buttons.forEach((button) => {
+        button.classList.toggle("active", button.dataset.waveValue === select.value);
+      });
+    };
+
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const nextValue = button.dataset.waveValue;
+        if (!nextValue || select.value === nextValue) return;
+        select.value = nextValue;
+        select.dispatchEvent(new Event("input", { bubbles: true }));
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        syncFromSelect();
+      });
+    });
+
+    select.addEventListener("input", syncFromSelect);
+    select.addEventListener("change", syncFromSelect);
+    syncTasks.push(syncFromSelect);
+    syncFromSelect();
+  });
+
+  return () => {
+    syncTasks.forEach((sync) => sync());
+  };
+}
