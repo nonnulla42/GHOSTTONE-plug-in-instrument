@@ -236,6 +236,31 @@ test("streaming runtime keeps a smaller live window than the full generated time
   assert.equal(runtime.windowPattern.loopBeats, runtime.pattern.loopBeats);
 });
 
+test("streaming runtime can prune old generated history when configured", () => {
+  const settings = {
+    generatorMode: "infinite",
+    harmonicMotion: 0.3,
+    mode: "arp",
+    harmonyLock: 0.45,
+    stayMusical: true,
+  };
+  const pattern = generatePattern(settings, progression, 7340);
+  const runtime = createInfiniteStreamRuntime(pattern, settings, 7340, {
+    initialLoopCount: 1,
+    extendLoopCount: 2,
+    lowWaterBeats: 16,
+    prunePastBeats: 8,
+  });
+  const currentBeat = 63.8;
+
+  ensureInfiniteBeats(runtime, currentBeat);
+
+  const minEndBeat = currentBeat - 8;
+  assert.ok(runtime.pattern.loopBeats > pattern.templateLoopBeats);
+  assert.ok(runtime.pattern.sections.every((section) => section.startBeat + section.durationBeats >= minEndBeat));
+  assert.ok(runtime.pattern.events.every((event) => event.startBeat + event.durationBeats >= minEndBeat));
+});
+
 test("incremental extension matches the deterministic full rebuild result", () => {
   const settings = {
     generatorMode: "infinite",

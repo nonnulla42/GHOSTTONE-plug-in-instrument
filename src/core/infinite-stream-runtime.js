@@ -26,6 +26,7 @@ export function createInfiniteStreamRuntime(pattern, settings, seed, options = {
     ? Number(options.retainFutureBeats)
     : Math.max(lowWaterBeats * 2, templateLoopBeats * 2);
   const windowUpdateStepBeats = Number(options.windowUpdateStepBeats) > 0 ? Number(options.windowUpdateStepBeats) : 4;
+  const prunePastBeats = Number(options.prunePastBeats) > 0 ? Number(options.prunePastBeats) : Infinity;
 
   const runtime = {
     mode: "infinite-stream",
@@ -40,6 +41,7 @@ export function createInfiniteStreamRuntime(pattern, settings, seed, options = {
     retainPastBeats,
     retainFutureBeats,
     windowUpdateStepBeats,
+    prunePastBeats,
     pattern,
     windowPattern: {
       ...pattern,
@@ -76,9 +78,10 @@ export function ensureInfiniteBeats(runtime, currentBeat, options = {}) {
   const minimumRemainingBeats = Number(options.minimumRemainingBeats) > 0 ? Number(options.minimumRemainingBeats) : runtime.lowWaterBeats;
   const targetMinimumBeats = Number(options.targetMinimumBeats) > 0 ? Number(options.targetMinimumBeats) : null;
   let extended = false;
+  const beat = Math.max(0, Number(currentBeat) || 0);
 
   while (true) {
-    const remainingBeats = runtime.pattern.loopBeats - currentBeat;
+    const remainingBeats = runtime.pattern.loopBeats - beat;
     const hasEnoughAhead = remainingBeats >= minimumRemainingBeats;
     const hasEnoughTotal = targetMinimumBeats == null || runtime.pattern.loopBeats >= targetMinimumBeats;
     if (hasEnoughAhead && hasEnoughTotal) break;
@@ -86,8 +89,10 @@ export function ensureInfiniteBeats(runtime, currentBeat, options = {}) {
     extended = true;
   }
 
-  if (extended || shouldRefreshWindow(runtime, currentBeat)) {
-    updateWindowPattern(runtime, currentBeat);
+  const pruned = pruneInfiniteHistory(runtime, beat);
+
+  if (extended || pruned || shouldRefreshWindow(runtime, beat)) {
+    updateWindowPattern(runtime, beat);
   }
 
   return runtime.windowPattern;
@@ -120,6 +125,28 @@ export function extendInfiniteRuntime(runtime, loopCount = runtime.extendLoopCou
 function shouldRefreshWindow(runtime, currentBeat) {
   if (!Number.isFinite(runtime.lastWindowShiftBeat)) return true;
   return currentBeat - runtime.lastWindowShiftBeat >= runtime.windowUpdateStepBeats;
+}
+
+function pruneInfiniteHistory(runtime, currentBeat) {
+  if (!Number.isFinite(runtime.prunePastBeats)) return false;
+
+  const minEndBeat = Math.max(0, currentBeat - runtime.prunePastBeats);
+  const previousSectionCount = runtime.pattern.sections.length;
+  const previousEventCount = runtime.pattern.events.length;
+
+  runtime.pattern.sections = runtime.pattern.sections.filter(
+    (section) => section.startBeat + section.durationBeats >= minEndBeat,
+  );
+  runtime.pattern.events = runtime.pattern.events.filter(
+    (event) => event.startBeat + event.durationBeats >= minEndBeat,
+  );
+
+  const pruned = runtime.pattern.sections.length !== previousSectionCount || runtime.pattern.events.length !== previousEventCount;
+  if (pruned) {
+    runtime.history = runtime.pattern.sections.slice(-8).map((section) => section.state).filter(Boolean);
+  }
+
+  return pruned;
 }
 
 function updateWindowPattern(runtime, currentBeat, options = {}) {

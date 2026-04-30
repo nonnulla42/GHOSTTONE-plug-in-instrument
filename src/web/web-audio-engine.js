@@ -59,6 +59,11 @@ function isInfiniteGeneratorMode(value) {
   return value === "infinite" || value === "infinitePhrase";
 }
 
+const LIVE_INFINITE_RUNTIME_OPTIONS = Object.freeze({
+  // Keep enough musical history for continuity while avoiding unbounded growth.
+  prunePastBeats: 96,
+});
+
 export class WebAudioEngine {
   constructor({ lookaheadSeconds = 0.18, tickMs = 45 } = {}) {
     this.lookaheadSeconds = lookaheadSeconds;
@@ -161,7 +166,7 @@ export class WebAudioEngine {
     this.loopStartTime = ctx.currentTime + 0.05;
     this.lastScheduledBeat = null;
     this.streamRuntime = isInfiniteGeneratorMode(pattern.generatorMode)
-      ? createInfiniteStreamRuntime(pattern, coreSettings, pattern.seed || 1)
+      ? createInfiniteStreamRuntime(pattern, coreSettings, pattern.seed || 1, LIVE_INFINITE_RUNTIME_OPTIONS)
       : null;
     if (this.streamRuntime) {
       this.onPatternExtended?.(this.streamRuntime.windowPattern);
@@ -222,7 +227,7 @@ export class WebAudioEngine {
         this.currentSoundSettings = soundSettings;
         this.currentBpm = bpm;
         if (isInfiniteGeneratorMode(pattern.generatorMode)) {
-          this.streamRuntime = createInfiniteStreamRuntime(pattern, coreSettings, pattern.seed || 1);
+          this.streamRuntime = createInfiniteStreamRuntime(pattern, coreSettings, pattern.seed || 1, LIVE_INFINITE_RUNTIME_OPTIONS);
         } else {
           this.streamRuntime = null;
         }
